@@ -123,7 +123,7 @@ function groupOddsByProp(rows) {
 }
 
 /**
- * Entry point called from the */10-minute cron trigger.
+ * Entry point called from the 10-minute cron trigger.
  * Fetches, groups, and writes current pitcher prop odds to KV.
  */
 export async function refreshOdds(env) {
