@@ -1186,38 +1186,83 @@ document.querySelectorAll('.tab-row').forEach(row => {
   });
 });
 
-/* ---------------- Fake props data ---------------- */
-const propsData = [
-  { name:"Mason Reyes", initials:"MR", matchup:"MIA @ ATL", market:"Over 6.5 Pitcher Strikeouts", line:"6.5", odds:[{book:"DK",val:"-115",best:true},{book:"FD",val:"-108",best:false}] },
-  { name:"Mason Reyes", initials:"MR", matchup:"MIA @ ATL", market:"Under 6.5 Pitcher Strikeouts", line:"6.5", odds:[{book:"DK",val:"-105",best:false},{book:"FD",val:"-112",best:false}] },
-  { name:"Derek Yancey", initials:"DY", matchup:"SF @ SD", market:"Over 4.5 Pitcher Hits Allowed", line:"4.5", odds:[{book:"DK",val:"-130",best:false},{book:"FD",val:"-121",best:true}] },
-  { name:"Derek Yancey", initials:"DY", matchup:"SF @ SD", market:"Over 5.5 Pitcher Strikeouts", line:"5.5", odds:[{book:"DK",val:"-118",best:true},{book:"FD",val:"-125",best:false}] },
-  { name:"Wes Halloran", initials:"WH", matchup:"NYY @ BOS", market:"Under 2.5 Walks Allowed", line:"2.5", odds:[{book:"DK",val:"+102",best:true},{book:"FD",val:"-105",best:false}] },
-  { name:"Trent Ogawa", initials:"TO", matchup:"CHC @ MIL", market:"Over 5.5 Pitcher Strikeouts", line:"5.5", odds:[{book:"DK",val:"-140",best:false},{book:"FD",val:"-132",best:true}] },
-  { name:"Marcus Vell", initials:"MV", matchup:"HOU @ TEX", market:"Over 1.5 Earned Runs", line:"1.5", odds:[{book:"DK",val:"-150",best:true},{book:"FD",val:"-155",best:false}] },
-  { name:"Ryan Castellano", initials:"RC", matchup:"LAD @ ARI", market:"Under 17.5 Outs Recorded", line:"17.5", odds:[{book:"DK",val:"-110",best:false},{book:"FD",val:"-102",best:true}] },
-];
+/* ---------------- Live props data (from /api/odds) ---------------- */
+const MARKET_LABELS = {
+  player_strikeouts: "Pitcher Strikeouts",
+  player_earned_runs: "Earned Runs",
+  player_earned_runs_allowed: "Earned Runs",
+  player_walks_allowed: "Walks Allowed",
+  player_hits_allowed: "Hits Allowed",
+  player_outs_recorded: "Outs Recorded",
+};
+
+const BOOK_LABELS = { draftkings: "DK", fanduel: "FD", betmgm: "MGM", caesars: "CZR" };
+
+function marketLabel(marketType) {
+  if (MARKET_LABELS[marketType]) return MARKET_LABELS[marketType];
+  return marketType.replace(/^player_/, "").replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function initialsFor(name) {
+  return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+}
 
 const propsTable = document.getElementById('props-table');
-propsData.forEach(p => {
-  const row = document.createElement('div');
-  row.className = 'prop-row';
-  row.onclick = () => goPage('detail');
-  row.innerHTML = `
-    <div class="prop-player">
-      <div class="prop-avatar">${p.initials}</div>
-      <div>
-        <div class="prop-name">${p.name} &middot; ${p.matchup}</div>
-        <div class="prop-sub">${p.market}</div>
+
+async function loadProps() {
+  propsTable.insertAdjacentHTML('beforeend',
+    '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">Loading live odds&hellip;</div>');
+
+  let payload;
+  try {
+    const res = await fetch('/api/odds');
+    payload = await res.json();
+  } catch (err) {
+    propsTable.innerHTML = '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">Couldn\'t load odds right now. Try refreshing.</div>';
+    return;
+  }
+
+  propsTable.querySelectorAll('.prop-row, div[style]').forEach((el) => el.remove());
+
+  const props = payload.props || [];
+  if (props.length === 0) {
+    propsTable.insertAdjacentHTML('beforeend',
+      '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">No pitcher props posted yet for today\'s slate &mdash; check back closer to game time.</div>');
+    return;
+  }
+
+  props.forEach((p) => {
+    const bestOdds = Math.max(...p.books.map((b) => b.odds_american));
+    const matchup = `${p.away_team} @ ${p.home_team}`;
+    const marketText = `${p.selection === 'Over' ? 'Over' : 'Under'} ${p.line} ${marketLabel(p.market_type)}`;
+
+    const row = document.createElement('div');
+    row.className = 'prop-row';
+    row.onclick = () => goPage('detail');
+    row.innerHTML = `
+      <div class="prop-player">
+        <div class="prop-avatar">${initialsFor(p.player_name)}</div>
+        <div>
+          <div class="prop-name">${p.player_name} &middot; ${matchup}</div>
+          <div class="prop-sub">${marketText}</div>
+        </div>
       </div>
-    </div>
-    <div><div class="line-badge">${p.line}</div></div>
-    <div class="odds-row">
-      ${p.odds.map(o => `<div class="odds-badge ${o.best ? 'odds-best' : 'odds-neutral'}"><span class="book-dot" style="background:${o.best ? 'var(--green)' : 'var(--text-faint)'}"></span>${o.book} ${o.val}</div>`).join('')}
-    </div>
-  `;
-  propsTable.appendChild(row);
-});
+      <div><div class="line-badge">${p.line}</div></div>
+      <div class="odds-row">
+        ${p.books.map((b) => {
+          const isBest = b.odds_american === bestOdds;
+          const val = b.odds_american > 0 ? `+${b.odds_american}` : b.odds_american;
+          const label = BOOK_LABELS[b.sportsbook] || b.sportsbook.slice(0, 3).toUpperCase();
+          return `<div class="odds-badge ${isBest ? 'odds-best' : 'odds-neutral'}"><span class="book-dot" style="background:${isBest ? 'var(--green)' : 'var(--text-faint)'}"></span>${label} ${val}</div>`;
+        }).join('')}
+      </div>
+    `;
+    propsTable.appendChild(row);
+  });
+}
+
+loadProps();
 
 /* ---------------- Fake schedule data ---------------- */
 const scheduleData = [
