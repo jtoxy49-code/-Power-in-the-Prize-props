@@ -2,6 +2,10 @@ name = "power-in-the-prize-props"
 main = "src/index.js"
 compatibility_date = "2026-08-01"
 
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
 [triggers]
 crons = ["*/10 * * * *", "0 6,23 * * *"]
 
