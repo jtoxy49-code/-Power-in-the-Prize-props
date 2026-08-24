@@ -4,6 +4,17 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    // --- Public API routes ---
+    if (url.pathname === "/api/odds") {
+      const data = await env.PROPS_DATA.get("odds:latest");
+      return new Response(data || '{"props":[],"updated_at":null}', {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "public, max-age=60", // odds refresh every 10 min anyway
+        },
+      });
+    }
+
     // --- TEMPORARY DEBUG ROUTES — remove before going live ---
     if (url.pathname === "/debug/refresh-odds") {
       try {
@@ -39,4 +50,3 @@ export default {
     }
   },
 };
-
