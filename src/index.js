@@ -53,7 +53,7 @@ export default {
     }
 
     if (url.pathname === "/debug/stats") {
-      const data = await env.PROPS_DATA.get("stats:expected_raw");
+      const data = await env.PROPS_DATA.get("stats:expected");
       return new Response(data || "No stats data in KV yet — run /debug/refresh-stats first.", {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
