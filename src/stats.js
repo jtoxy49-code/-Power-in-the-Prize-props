@@ -1,35 +1,45 @@
 const SAVANT_BASE = "https://baseballsavant.mlb.com/leaderboard/expected_statistics";
 
 /**
- * Minimal CSV parser — handles quoted fields and commas inside quotes.
- * Baseball Savant's leaderboard CSV export is simple enough not to need
- * a full RFC 4180 library for this.
+ * Parses a single CSV line into an array of fields, honoring quotes
+ * (so a quoted field containing a comma — e.g. "Last, First" — stays
+ * one field instead of splitting in two).
+ */
+function parseCSVLine(line) {
+  const values = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      values.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  values.push(current);
+  return values.map((v) => v.trim());
+}
+
+/**
+ * Parses a full CSV blob into an array of row objects. Both the
+ * header row and every data row go through the same quote-aware
+ * parser, so they stay aligned no matter how many fields contain
+ * embedded commas.
  */
 function parseCSV(text) {
   const lines = text.trim().split("\n");
-  const headers = lines[0].split(",").map((h) => h.trim());
+  const headers = parseCSVLine(lines[0]);
 
   return lines.slice(1).map((line) => {
-    const values = [];
-    let current = "";
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === "," && !inQuotes) {
-        values.push(current);
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    values.push(current);
-
+    const values = parseCSVLine(line);
     const row = {};
     headers.forEach((h, i) => {
-      row[h] = values[i] !== undefined ? values[i].trim() : "";
+      row[h] = values[i] !== undefined ? values[i] : "";
     });
     return row;
   });
@@ -45,7 +55,6 @@ export async function fetchExpectedStats(year) {
 
   const res = await fetch(url, {
     headers: {
-      // Savant serves different content to obvious bot user agents on some endpoints
       "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)",
     },
   });
@@ -59,24 +68,49 @@ export async function fetchExpectedStats(year) {
 }
 
 /**
+ * Reshapes raw parsed rows (whose header is literally "last_name,
+ * first_name" as one combined column, "Lastname, Firstname" style)
+ * into clean objects the frontend can actually use.
+ */
+function cleanRow(raw) {
+  return {
+    name: raw["last_name, first_name"] || "",
+    player_id: raw["player_id"] || "",
+    year: raw["year"] || "",
+    pa: Number(raw["pa"]) || 0,
+    bip: Number(raw["bip"]) || 0,
+    ba: Number(raw["ba"]) || null,
+    est_ba: Number(raw["est_ba"]) || null,
+    slg: Number(raw["slg"]) || null,
+    est_slg: Number(raw["est_slg"]) || null,
+    woba: Number(raw["woba"]) || null,
+    est_woba: Number(raw["est_woba"]) || null,
+    era: Number(raw["era"]) || null,
+    xera: Number(raw["xera"]) || null,
+  };
+}
+
+/**
  * Entry point called from the twice-daily cron trigger.
- * Fetches and stores RAW parsed rows for now — column names get
- * verified via /debug/stats before we build the real field mapping
- * (Barrel%, xBA, etc.) into the site's data shape.
+ * Fetches, cleans, and stores current-season pitcher expected stats.
+ *
+ * Note: this leaderboard only covers xBA/xSLG/xwOBA/xERA vs actual —
+ * it does NOT include Barrel%, HardHit%, K%/BB%, or FIP/WHIP. Those
+ * live on separate Savant leaderboards and are a follow-up, not yet
+ * pulled here.
  */
 export async function refreshStats(env) {
   const year = new Date().getUTCFullYear();
-  const rows = await fetchExpectedStats(year);
+  const rawRows = await fetchExpectedStats(year);
+  const pitchers = rawRows.map(cleanRow).filter((p) => p.name);
 
   await env.PROPS_DATA.put(
-    "stats:expected_raw",
+    "stats:expected",
     JSON.stringify({
-      row_count: rows.length,
-      sample_columns: rows.length > 0 ? Object.keys(rows[0]) : [],
-      rows,
+      pitchers,
       updated_at: new Date().toISOString(),
     })
   );
 
-  console.log(`Stats refresh complete: ${rows.length} pitcher rows stored`);
+  console.log(`Stats refresh complete: ${pitchers.length} pitcher rows stored`);
 }
