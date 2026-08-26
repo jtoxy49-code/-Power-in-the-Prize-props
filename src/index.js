@@ -1,4 +1,5 @@
 import { refreshOdds } from "./odds.js";
+import { refreshStats } from "./stats.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -10,7 +11,7 @@ export default {
       return new Response(data || '{"props":[],"updated_at":null}', {
         headers: {
           "content-type": "application/json; charset=utf-8",
-          "cache-control": "public, max-age=60", // odds refresh every 10 min anyway
+          "cache-control": "public, max-age=60",
         },
       });
     }
@@ -36,6 +37,27 @@ export default {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
     }
+
+    if (url.pathname === "/debug/refresh-stats") {
+      try {
+        await refreshStats(env);
+        return new Response("Stats refresh ran successfully. Check /debug/stats to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/stats") {
+      const data = await env.PROPS_DATA.get("stats:expected_raw");
+      return new Response(data || "No stats data in KV yet — run /debug/refresh-stats first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
     // --- END DEBUG ROUTES ---
 
     return env.ASSETS.fetch(request);
@@ -45,8 +67,7 @@ export default {
     if (event.cron === "*/10 * * * *") {
       ctx.waitUntil(refreshOdds(env));
     } else {
-      console.log("Stats refresh trigger fired");
-      // stats fetch logic goes here (Baseball Savant / Statcast) — next up
+      ctx.waitUntil(refreshStats(env));
     }
   },
 };
