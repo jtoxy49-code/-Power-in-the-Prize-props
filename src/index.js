@@ -4,6 +4,7 @@ import { refreshBarrelStats } from "./barrels.js";
 import { refreshSeasonStats } from "./season-stats.js";
 import { buildMergedStats, normalizeName } from "./merge.js";
 import { fetchGameLog, getCachedGameLog } from "./gamelog.js";
+import { refreshArsenalStats } from "./pitch-arsenal.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -203,6 +204,26 @@ export default {
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
       }
+    }
+    if (url.pathname === "/debug/refresh-arsenal") {
+      try {
+        await refreshArsenalStats(env);
+        return new Response("Arsenal stats refresh ran successfully. Check /debug/arsenal to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Arsenal stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/arsenal") {
+      const data = await env.PROPS_DATA.get("stats:arsenal_raw");
+      return new Response(data || "No arsenal data in KV yet — run /debug/refresh-arsenal first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
     }
     // --- END DEBUG ROUTES ---
 
