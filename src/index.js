@@ -5,6 +5,7 @@ import { refreshSeasonStats } from "./season-stats.js";
 import { buildMergedStats, normalizeName } from "./merge.js";
 import { fetchGameLog, getCachedGameLog } from "./gamelog.js";
 import { refreshArsenalStats } from "./pitch-arsenal.js";
+import { fetchLineupsForDate } from "./lineups.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -224,6 +225,39 @@ export default {
       return new Response(data || "No arsenal data in KV yet — run /debug/refresh-arsenal first.", {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
+    }
+    if (url.pathname === "/debug/lineups") {
+      const date = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
+      try {
+        const raw = await fetchLineupsForDate(date);
+        const games = raw?.dates?.[0]?.games || [];
+        const firstGame = games[0] || null;
+        return new Response(
+          JSON.stringify(
+            {
+              date,
+              games_found: games.length,
+              first_game_top_level_keys: firstGame ? Object.keys(firstGame) : null,
+              first_game_teams_shape: firstGame?.teams
+                ? Object.keys(firstGame.teams)
+                : null,
+              first_game_home_lineup_sample: firstGame?.lineups?.homePlayers?.slice(0, 3) || null,
+              first_game_away_lineup_sample: firstGame?.lineups?.awayPlayers?.slice(0, 3) || null,
+              first_game_matchup: firstGame
+                ? `${firstGame.teams?.away?.team?.name} @ ${firstGame.teams?.home?.team?.name}`
+                : null,
+            },
+            null,
+            2
+          ),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Lineups fetch failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
     }
     // --- END DEBUG ROUTES ---
 
