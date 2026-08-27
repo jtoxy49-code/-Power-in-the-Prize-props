@@ -1,6 +1,7 @@
 import { refreshOdds } from "./odds.js";
 import { refreshStats } from "./stats.js";
 import { refreshBarrelStats } from "./barrels.js";
+import { refreshSeasonStats } from "./season-stats.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -75,8 +76,29 @@ export default {
     }
 
     if (url.pathname === "/debug/barrels") {
-      const data = await env.PROPS_DATA.get("stats:barrels_raw");
+      const data = await env.PROPS_DATA.get("stats:barrels");
       return new Response(data || "No barrel data in KV yet — run /debug/refresh-barrels first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+
+    if (url.pathname === "/debug/refresh-season") {
+      try {
+        await refreshSeasonStats(env);
+        return new Response("Season stats refresh ran successfully. Check /debug/season to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Season stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/season") {
+      const data = await env.PROPS_DATA.get("stats:season_raw");
+      return new Response(data || "No season data in KV yet — run /debug/refresh-season first.", {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
     }
@@ -91,6 +113,7 @@ export default {
     } else {
       ctx.waitUntil(refreshStats(env));
       ctx.waitUntil(refreshBarrelStats(env));
+      ctx.waitUntil(refreshSeasonStats(env));
     }
   },
 };
