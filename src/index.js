@@ -231,21 +231,26 @@ export default {
       try {
         const raw = await fetchLineupsForDate(date);
         const games = raw?.dates?.[0]?.games || [];
-        const firstGame = games[0] || null;
+
+        const gameSummaries = games.map((g) => ({
+          matchup: `${g.teams?.away?.team?.name} @ ${g.teams?.home?.team?.name}`,
+          status: g.status?.detailedState || null,
+          has_lineups_key: !!g.lineups,
+          home_lineup_count: g.lineups?.homePlayers?.length || 0,
+          away_lineup_count: g.lineups?.awayPlayers?.length || 0,
+          away_probable_pitcher: g.teams?.away?.probablePitcher?.fullName || null,
+          home_probable_pitcher: g.teams?.home?.probablePitcher?.fullName || null,
+        }));
+
+        const gameWithLineup = games.find((g) => g.lineups?.homePlayers?.length > 0);
+
         return new Response(
           JSON.stringify(
             {
               date,
               games_found: games.length,
-              first_game_top_level_keys: firstGame ? Object.keys(firstGame) : null,
-              first_game_teams_shape: firstGame?.teams
-                ? Object.keys(firstGame.teams)
-                : null,
-              first_game_home_lineup_sample: firstGame?.lineups?.homePlayers?.slice(0, 3) || null,
-              first_game_away_lineup_sample: firstGame?.lineups?.awayPlayers?.slice(0, 3) || null,
-              first_game_matchup: firstGame
-                ? `${firstGame.teams?.away?.team?.name} @ ${firstGame.teams?.home?.team?.name}`
-                : null,
+              game_summaries: gameSummaries,
+              sample_lineup_player: gameWithLineup?.lineups?.homePlayers?.[0] || null,
             },
             null,
             2
