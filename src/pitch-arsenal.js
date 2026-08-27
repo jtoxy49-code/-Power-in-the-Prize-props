@@ -34,12 +34,6 @@ function parseCSV(text) {
   });
 }
 
-/**
- * Fetches the pitch-arsenal-stats leaderboard — one row per
- * pitcher per pitch type (Four-Seam, Slider, etc.), not one row
- * per pitcher. min=1 to capture every pitch type thrown, not just
- * qualified volume.
- */
 export async function fetchPitchArsenal(year) {
   const url = `${SAVANT_ARSENAL_BASE}?type=pitcher&year=${year}&position=&team=&min=1&csv=true`;
 
@@ -58,23 +52,48 @@ export async function fetchPitchArsenal(year) {
 }
 
 /**
- * Entry point — stores RAW parsed rows plus real column names, same
- * as the first pass on every other Savant leaderboard, since this
- * one's exact columns aren't confirmed yet.
+ * Confirmed field mapping (verified against real 2026 data):
+ * one row per pitcher per pitch type.
+ */
+function cleanRow(raw) {
+  return {
+    player_id: raw["player_id"] || "",
+    name: raw["last_name, first_name"] || "",
+    pitch_type: raw["pitch_type"] || "",
+    pitch_name: raw["pitch_name"] || "",
+    usage_pct: Number(raw["pitch_usage"]) || null,
+    pitches: Number(raw["pitches"]) || 0,
+    pa: Number(raw["pa"]) || 0,
+    ba: Number(raw["ba"]) || null,
+    est_ba: Number(raw["est_ba"]) || null,
+    slg: Number(raw["slg"]) || null,
+    est_slg: Number(raw["est_slg"]) || null,
+    woba: Number(raw["woba"]) || null,
+    est_woba: Number(raw["est_woba"]) || null,
+    whiff_pct: Number(raw["whiff_percent"]) || null,
+    k_pct: Number(raw["k_percent"]) || null,
+    put_away_pct: Number(raw["put_away"]) || null,
+    hard_hit_pct: Number(raw["hard_hit_percent"]) || null,
+  };
+}
+
+/**
+ * Entry point — called from the twice-daily cron trigger. Stores the
+ * full flat list (one row per pitcher per pitch type); grouping by
+ * player happens in merge.js.
  */
 export async function refreshArsenalStats(env) {
   const year = new Date().getUTCFullYear();
-  const rows = await fetchPitchArsenal(year);
+  const rawRows = await fetchPitchArsenal(year);
+  const rows = rawRows.map(cleanRow).filter((r) => r.name && r.pitch_type);
 
   await env.PROPS_DATA.put(
-    "stats:arsenal_raw",
+    "stats:arsenal",
     JSON.stringify({
-      row_count: rows.length,
-      sample_columns: rows.length > 0 ? Object.keys(rows[0]) : [],
-      sample_rows: rows.slice(0, 3), // a few rows, likely different pitch types for the same pitcher
+      rows,
       updated_at: new Date().toISOString(),
     })
   );
 
-  console.log(`Arsenal stats refresh complete: ${rows.length} rows stored`);
+  console.log(`Arsenal stats refresh complete: ${rows.length} pitch-type rows stored`);
 }
