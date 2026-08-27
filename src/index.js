@@ -6,6 +6,7 @@ import { buildMergedStats, normalizeName } from "./merge.js";
 import { fetchGameLog, getCachedGameLog } from "./gamelog.js";
 import { refreshArsenalStats } from "./pitch-arsenal.js";
 import { fetchLineupsForDate, getTodaysLineups } from "./lineups.js";
+import { refreshParkFactors } from "./park-factors.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -280,6 +281,26 @@ export default {
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
       }
+    }
+    if (url.pathname === "/debug/refresh-parks") {
+      try {
+        await refreshParkFactors(env);
+        return new Response("Park factors refresh ran successfully. Check /debug/parks to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Park factors refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/parks") {
+      const data = await env.PROPS_DATA.get("stats:parks_raw");
+      return new Response(data || "No park data in KV yet — run /debug/refresh-parks first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
     }
     // --- END DEBUG ROUTES ---
 
