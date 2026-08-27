@@ -2,6 +2,7 @@ import { refreshOdds } from "./odds.js";
 import { refreshStats } from "./stats.js";
 import { refreshBarrelStats } from "./barrels.js";
 import { refreshSeasonStats } from "./season-stats.js";
+import { buildMergedStats, normalizeName } from "./merge.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -16,6 +17,38 @@ export default {
           "cache-control": "public, max-age=60",
         },
       });
+    }
+
+    if (url.pathname === "/api/pitcher") {
+      const nameParam = url.searchParams.get("name") || "";
+      const target = normalizeName(nameParam);
+
+      const [mergedData, oddsData] = await Promise.all([
+        env.PROPS_DATA.get("stats:merged", "json"),
+        env.PROPS_DATA.get("odds:latest", "json"),
+      ]);
+
+      const statMatch = (mergedData?.pitchers || []).find(
+        (p) => p.normalized_name === target
+      );
+      const propMatches = (oddsData?.props || []).filter(
+        (p) => normalizeName(p.player_name) === target
+      );
+
+      return new Response(
+        JSON.stringify({
+          query: nameParam,
+          matched: !!statMatch,
+          stats: statMatch || null,
+          props: propMatches,
+        }),
+        {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=60",
+          },
+        }
+      );
     }
 
     // --- TEMPORARY DEBUG ROUTES — remove before going live ---
@@ -102,6 +135,28 @@ export default {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
     }
+
+    if (url.pathname === "/debug/refresh-merge") {
+      try {
+        const merged = await buildMergedStats(env);
+        return new Response(
+          `Merge ran successfully: ${merged.length} pitchers joined. Check /debug/merged to view it.`,
+          { headers: { "content-type": "text/plain; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Merge failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/merged") {
+      const data = await env.PROPS_DATA.get("stats:merged");
+      return new Response(data || "No merged data yet — run /debug/refresh-merge first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
     // --- END DEBUG ROUTES ---
 
     return env.ASSETS.fetch(request);
@@ -111,9 +166,12 @@ export default {
     if (event.cron === "*/10 * * * *") {
       ctx.waitUntil(refreshOdds(env));
     } else {
-      ctx.waitUntil(refreshStats(env));
-      ctx.waitUntil(refreshBarrelStats(env));
-      ctx.waitUntil(refreshSeasonStats(env));
+      ctx.waitUntil(
+        (async () => {
+          await Promise.all([refreshStats(env), refreshBarrelStats(env), refreshSeasonStats(env)]);
+          await buildMergedStats(env);
+        })()
+      );
     }
   },
 };
