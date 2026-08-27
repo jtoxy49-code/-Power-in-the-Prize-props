@@ -7,10 +7,30 @@ import { fetchGameLog, getCachedGameLog } from "./gamelog.js";
 import { refreshArsenalStats } from "./pitch-arsenal.js";
 import { fetchLineupsForDate, getTodaysLineups } from "./lineups.js";
 import { refreshParkFactors } from "./park-factors.js";
+import { getParkFactors } from "./park-factors-static.js";
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if (url.pathname === "/api/park-factors") {
+      const team = url.searchParams.get("team");
+      if (!team) {
+        return new Response('{"error":"missing team parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const factors = getParkFactors(team);
+      return new Response(
+        JSON.stringify({
+          team,
+          factors,
+          data_type: "historical_approximate", // NOT live-computed like other sources
+        }),
+        { headers: { "content-type": "application/json; charset=utf-8" } }
+      );
+    }
 
     // --- Public API routes ---
     if (url.pathname === "/api/odds") {
