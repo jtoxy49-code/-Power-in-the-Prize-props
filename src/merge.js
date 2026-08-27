@@ -31,10 +31,11 @@ export function normalizeName(raw) {
  * matching against odds (which only has a player_name, no ID).
  */
 export async function buildMergedStats(env) {
-  const [expectedData, barrelsData, seasonData] = await Promise.all([
+  const [expectedData, barrelsData, seasonData, arsenalData] = await Promise.all([
     env.PROPS_DATA.get("stats:expected", "json"),
     env.PROPS_DATA.get("stats:barrels", "json"),
     env.PROPS_DATA.get("stats:season", "json"),
+    env.PROPS_DATA.get("stats:arsenal", "json"),
   ]);
 
   const byId = new Map();
@@ -57,6 +58,22 @@ export async function buildMergedStats(env) {
   (expectedData?.pitchers || []).forEach((p) => upsert(p.player_id, p.name, "expected", p));
   (barrelsData?.pitchers || []).forEach((p) => upsert(p.player_id, p.name, "barrels", p));
   (seasonData?.pitchers || []).forEach((p) => upsert(p.player_id, p.name, "season", p));
+
+  // Arsenal is many rows per player (one per pitch type) — group them
+  // into an array before attaching, rather than a single object.
+  const arsenalByPlayer = new Map();
+  (arsenalData?.rows || []).forEach((row) => {
+    if (!row.player_id) return;
+    const list = arsenalByPlayer.get(row.player_id) || [];
+    list.push(row);
+    arsenalByPlayer.set(row.player_id, list);
+  });
+  arsenalByPlayer.forEach((pitches, id) => {
+    // sort by usage so the most-thrown pitch shows first, matching
+    // how the reference site orders the arsenal table
+    pitches.sort((a, b) => (b.usage_pct || 0) - (a.usage_pct || 0));
+    upsert(id, pitches[0]?.name, "arsenal", pitches);
+  });
 
   const merged = Array.from(byId.values());
 
