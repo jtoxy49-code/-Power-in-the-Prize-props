@@ -97,7 +97,7 @@ export default {
     }
 
     if (url.pathname === "/debug/season") {
-      const data = await env.PROPS_DATA.get("stats:season_raw");
+      const data = await env.PROPS_DATA.get("stats:season");
       return new Response(data || "No season data in KV yet — run /debug/refresh-season first.", {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
