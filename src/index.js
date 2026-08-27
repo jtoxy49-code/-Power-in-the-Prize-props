@@ -1,5 +1,6 @@
 import { refreshOdds } from "./odds.js";
 import { refreshStats } from "./stats.js";
+import { refreshBarrelStats } from "./barrels.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -58,6 +59,27 @@ export default {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
     }
+
+    if (url.pathname === "/debug/refresh-barrels") {
+      try {
+        await refreshBarrelStats(env);
+        return new Response("Barrel stats refresh ran successfully. Check /debug/barrels to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Barrel stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/barrels") {
+      const data = await env.PROPS_DATA.get("stats:barrels_raw");
+      return new Response(data || "No barrel data in KV yet — run /debug/refresh-barrels first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
     // --- END DEBUG ROUTES ---
 
     return env.ASSETS.fetch(request);
@@ -68,6 +90,7 @@ export default {
       ctx.waitUntil(refreshOdds(env));
     } else {
       ctx.waitUntil(refreshStats(env));
+      ctx.waitUntil(refreshBarrelStats(env));
     }
   },
 };
