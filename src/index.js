@@ -3,7 +3,7 @@ import { refreshStats } from "./stats.js";
 import { refreshBarrelStats } from "./barrels.js";
 import { refreshSeasonStats } from "./season-stats.js";
 import { buildMergedStats, normalizeName } from "./merge.js";
-import { fetchGameLog } from "./gamelog.js";
+import { fetchGameLog, getCachedGameLog } from "./gamelog.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -50,6 +50,31 @@ export default {
           },
         }
       );
+    }
+
+    if (url.pathname === "/api/gamelog") {
+      const playerId = url.searchParams.get("id");
+      if (!playerId) {
+        return new Response('{"error":"missing id parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const year = url.searchParams.get("year") || new Date().getUTCFullYear();
+      try {
+        const data = await getCachedGameLog(env, playerId, year);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=300",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
     }
 
     // --- TEMPORARY DEBUG ROUTES — remove before going live ---
