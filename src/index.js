@@ -5,7 +5,7 @@ import { refreshSeasonStats } from "./season-stats.js";
 import { buildMergedStats, normalizeName } from "./merge.js";
 import { fetchGameLog, getCachedGameLog } from "./gamelog.js";
 import { refreshArsenalStats } from "./pitch-arsenal.js";
-import { fetchLineupsForDate } from "./lineups.js";
+import { fetchLineupsForDate, getTodaysLineups } from "./lineups.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -65,6 +65,23 @@ export default {
       const year = url.searchParams.get("year") || new Date().getUTCFullYear();
       try {
         const data = await getCachedGameLog(env, playerId, year);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=300",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/lineups") {
+      try {
+        const data = await getTodaysLineups(env);
         return new Response(JSON.stringify(data), {
           headers: {
             "content-type": "application/json; charset=utf-8",
