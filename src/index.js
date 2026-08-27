@@ -220,7 +220,7 @@ export default {
     }
 
     if (url.pathname === "/debug/arsenal") {
-      const data = await env.PROPS_DATA.get("stats:arsenal_raw");
+      const data = await env.PROPS_DATA.get("stats:arsenal");
       return new Response(data || "No arsenal data in KV yet — run /debug/refresh-arsenal first.", {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
@@ -236,7 +236,12 @@ export default {
     } else {
       ctx.waitUntil(
         (async () => {
-          await Promise.all([refreshStats(env), refreshBarrelStats(env), refreshSeasonStats(env)]);
+          await Promise.all([
+            refreshStats(env),
+            refreshBarrelStats(env),
+            refreshSeasonStats(env),
+            refreshArsenalStats(env),
+          ]);
           await buildMergedStats(env);
         })()
       );
