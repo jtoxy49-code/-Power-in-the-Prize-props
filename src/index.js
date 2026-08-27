@@ -8,6 +8,8 @@ import { refreshArsenalStats } from "./pitch-arsenal.js";
 import { fetchLineupsForDate, getTodaysLineups } from "./lineups.js";
 import { refreshParkFactors } from "./park-factors.js";
 import { getParkFactors } from "./park-factors-static.js";
+import { getVenueCoords } from "./venue-coords.js";
+import { fetchWeatherForGame } from "./weather.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -30,6 +32,38 @@ export default {
         }),
         { headers: { "content-type": "application/json; charset=utf-8" } }
       );
+    }
+
+    if (url.pathname === "/api/weather") {
+      const team = url.searchParams.get("team");
+      const gameTime = url.searchParams.get("game_time");
+      if (!team || !gameTime) {
+        return new Response('{"error":"missing team or game_time parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const coords = getVenueCoords(team);
+      if (!coords) {
+        return new Response(JSON.stringify({ error: `no coordinates found for team: ${team}` }), {
+          status: 404,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const weather = await fetchWeatherForGame(coords.lat, coords.lon, gameTime);
+        return new Response(JSON.stringify({ team, game_time: gameTime, weather }), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=1800",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
     }
 
     // --- Public API routes ---
