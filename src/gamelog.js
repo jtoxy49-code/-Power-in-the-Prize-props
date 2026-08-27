@@ -1,11 +1,5 @@
 const MLB_STATS_BASE = "https://statsapi.mlb.com/api/v1";
 
-/**
- * Fetches one pitcher's game-by-game log for a season. Called
- * on-demand (when someone views that pitcher's detail page), not on
- * a cron — pre-fetching this for 800+ pitchers would blow past
- * Workers' per-invocation subrequest limits.
- */
 export async function fetchGameLog(playerId, year) {
   const url = `${MLB_STATS_BASE}/people/${playerId}/stats?stats=gameLog&group=pitching&season=${year}&sportId=1`;
 
@@ -23,9 +17,29 @@ export async function fetchGameLog(playerId, year) {
 }
 
 /**
- * Returns a KV-cached game log for a player, refetching only if the
- * cache is missing or older than 3 hours (game logs only change once
- * a game finishes, so this doesn't need to be fresh-fresh).
+ * Confirmed field mapping (verified against real 2026 data):
+ * each split has stat{}, team{}, opponent{}, date, isHome, isWin.
+ */
+function cleanGame(split) {
+  const s = split.stat || {};
+  return {
+    date: split.date,
+    opponent: split.opponent?.name || "",
+    is_home: !!split.isHome,
+    win: !!split.isWin,
+    innings_pitched: s.inningsPitched ?? null,
+    outs: Number(s.outs) || 0,
+    strikeouts: Number(s.strikeOuts) || 0,
+    walks: Number(s.baseOnBalls) || 0,
+    hits_allowed: Number(s.hits) || 0,
+    earned_runs: Number(s.earnedRuns) || 0,
+  };
+}
+
+/**
+ * Returns a KV-cached, cleaned game log for a player — refetched only
+ * if the cache is missing or older than 3 hours. Sorted oldest-to-
+ * newest so the frontend can slice "last N games" from the end.
  */
 export async function getCachedGameLog(env, playerId, year) {
   const cacheKey = `gamelog:${playerId}:${year}`;
@@ -41,13 +55,14 @@ export async function getCachedGameLog(env, playerId, year) {
   const raw = await fetchGameLog(playerId, year);
   const splits = raw?.stats?.[0]?.splits || [];
 
-  const result = {
-    games: splits,
-    fetched_at: new Date().toISOString(),
-  };
+  const games = splits
+    .map(cleanGame)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const result = { player_id: playerId, games, fetched_at: new Date().toISOString() };
 
   await env.PROPS_DATA.put(cacheKey, JSON.stringify(result), {
-    expirationTtl: 6 * 60 * 60, // auto-expire after 6 hours regardless
+    expirationTtl: 6 * 60 * 60,
   });
 
   return result;
