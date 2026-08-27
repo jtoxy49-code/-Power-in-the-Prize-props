@@ -34,7 +34,7 @@ function cleanSplit(split) {
   const baseOnBalls = Number(s.baseOnBalls) || 0;
 
   return {
-    player_id: split.player?.id ?? null,
+    player_id: split.player?.id != null ? String(split.player.id) : null,
     name: split.player?.fullName ?? "",
     team: split.team?.name ?? "",
     era: s.era ? Number(s.era) : null,
