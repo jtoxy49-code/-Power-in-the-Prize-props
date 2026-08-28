@@ -356,6 +356,37 @@ export default {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
     }
+    if (url.pathname === "/debug/batter-split") {
+      const year = new Date().getUTCFullYear();
+      const team = url.searchParams.get("team") || "WSH";
+      const hand = url.searchParams.get("hand") || "L";
+      const testUrl = `https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=${year}&position=&team=${team}&min=1&hand=${hand}&csv=true`;
+      try {
+        const res = await fetch(testUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" },
+        });
+        const text = await res.text();
+        const looksLikeCSV = !text.trim().startsWith("<");
+        return new Response(
+          JSON.stringify(
+            {
+              test_url: testUrl,
+              status: res.status,
+              looks_like_csv: looksLikeCSV,
+              first_500_chars: text.slice(0, 500),
+            },
+            null,
+            2
+          ),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Batter split test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
     // --- END DEBUG ROUTES ---
 
     return env.ASSETS.fetch(request);
