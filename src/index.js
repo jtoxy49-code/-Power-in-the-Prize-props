@@ -387,6 +387,41 @@ export default {
         });
       }
     }
+    if (url.pathname === "/debug/savant-raw") {
+      const target = url.searchParams.get("u");
+      if (!target) {
+        return new Response('{"error":"pass the target URL via ?u=<url-encoded Savant URL>"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const res = await fetch(target, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" },
+        });
+        const text = await res.text();
+        const looksLikeCSV = !text.trim().startsWith("<");
+        return new Response(
+          JSON.stringify(
+            {
+              target,
+              status: res.status,
+              looks_like_csv: looksLikeCSV,
+              first_line: looksLikeCSV ? text.split("\n")[0] : null,
+              first_300_chars: text.slice(0, 300),
+            },
+            null,
+            2
+          ),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Savant raw test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
     // --- END DEBUG ROUTES ---
 
     return env.ASSETS.fetch(request);
