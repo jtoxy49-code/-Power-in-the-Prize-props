@@ -16,6 +16,7 @@ import { buildMergedBatterStats } from "./batter-merge.js";
 import { refreshBatterPitchTypeStats, getTeamPitchTypeSplits } from "./batter-pitch-types.js";
 import { getTeamId } from "./team-ids.js";
 import { getSameHandedStartersVsTeam } from "./same-handed.js";
+import { getCachedPitchMetrics } from "./pitch-metrics.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -136,6 +137,30 @@ export default {
       try {
         const starters = await getSameHandedStartersVsTeam(env, teamId, team, hand);
         return new Response(JSON.stringify({ team, hand, starters }), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=600",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/pitch-metrics") {
+      const playerId = url.searchParams.get("id");
+      if (!playerId) {
+        return new Response('{"error":"missing id parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const data = await getCachedPitchMetrics(env, playerId);
+        return new Response(JSON.stringify(data), {
           headers: {
             "content-type": "application/json; charset=utf-8",
             "cache-control": "public, max-age=600",
