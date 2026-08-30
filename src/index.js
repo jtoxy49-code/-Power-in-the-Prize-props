@@ -11,7 +11,8 @@ import { getParkFactors } from "./park-factors-static.js";
 import { getVenueCoords } from "./venue-coords.js";
 import { fetchWeatherForGame } from "./weather.js";
 import { refreshBatterExpectedStats } from "./batter-expected.js";
-import { refreshBatterSeasonStatsRaw } from "./batter-season.js";
+import { refreshBatterSeasonStats } from "./batter-season.js";
+import { buildMergedBatterStats } from "./batter-merge.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -66,6 +67,27 @@ export default {
           headers: { "content-type": "application/json; charset=utf-8" },
         });
       }
+    }
+
+    if (url.pathname === "/api/team-batters") {
+      const team = url.searchParams.get("team");
+      if (!team) {
+        return new Response('{"error":"missing team parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const data = await env.PROPS_DATA.get("stats:batters_merged", "json");
+      const batters = data?.by_team?.[team] || [];
+      return new Response(
+        JSON.stringify({ team, batters, updated_at: data?.updated_at || null }),
+        {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=300",
+          },
+        }
+      );
     }
 
     // --- Public API routes ---
@@ -447,12 +469,12 @@ export default {
 
     if (url.pathname === "/debug/refresh-batter-season") {
       try {
-        await refreshBatterSeasonStatsRaw(env);
-        return new Response("Batter season shape check ran successfully. Check /debug/batter-season to view it.", {
+        await refreshBatterSeasonStats(env);
+        return new Response("Batter season stats refresh ran successfully. Check /debug/batter-season to view it.", {
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
       } catch (err) {
-        return new Response(`Batter season shape check failed:\n${err.message}`, {
+        return new Response(`Batter season stats refresh failed:\n${err.message}`, {
           status: 500,
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
@@ -460,10 +482,35 @@ export default {
     }
 
     if (url.pathname === "/debug/batter-season") {
-      const data = await env.PROPS_DATA.get("stats:batters_season_shape");
+      const data = await env.PROPS_DATA.get("stats:batters_season");
       return new Response(data || "No data yet — run /debug/refresh-batter-season first.", {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
+    }
+
+    if (url.pathname === "/debug/refresh-batter-merge") {
+      try {
+        const byTeam = await buildMergedBatterStats(env);
+        return new Response(
+          `Batter merge ran successfully: ${Object.keys(byTeam).length} teams. Check /debug/batter-merged?team=X to view one.`,
+          { headers: { "content-type": "text/plain; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Batter merge failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/batter-merged") {
+      const team = url.searchParams.get("team") || "Washington Nationals";
+      const data = await env.PROPS_DATA.get("stats:batters_merged", "json");
+      const teamBatters = data?.by_team?.[team] || null;
+      return new Response(
+        JSON.stringify({ team, batters: teamBatters, updated_at: data?.updated_at || null }, null, 2),
+        { headers: { "content-type": "application/json; charset=utf-8" } }
+      );
     }
     // --- END DEBUG ROUTES ---
 
@@ -481,8 +528,11 @@ export default {
             refreshBarrelStats(env),
             refreshSeasonStats(env),
             refreshArsenalStats(env),
+            refreshBatterExpectedStats(env),
+            refreshBatterSeasonStats(env),
           ]);
           await buildMergedStats(env);
+          await buildMergedBatterStats(env);
         })()
       );
     }
