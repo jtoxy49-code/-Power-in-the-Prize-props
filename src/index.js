@@ -579,6 +579,35 @@ export default {
         });
       }
     }
+    if (url.pathname === "/debug/boxscore") {
+      const gamePk = url.searchParams.get("gamePk") || "822688";
+      const testUrl = `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
+      try {
+        const res = await fetch(testUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" } });
+        const raw = await res.json();
+        const awayPitchers = raw?.liveData?.boxscore?.teams?.away?.pitchers || [];
+        const players = raw?.liveData?.boxscore?.teams?.away?.players || {};
+        const starterId = awayPitchers[0];
+        const starterKey = `ID${starterId}`;
+        return new Response(
+          JSON.stringify(
+            {
+              away_pitchers_in_order: awayPitchers,
+              starter_id: starterId,
+              starter_full_record: players[starterKey] || null,
+            },
+            null,
+            2
+          ),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Boxscore test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
     // --- END DEBUG ROUTES ---
 
     return env.ASSETS.fetch(request);
