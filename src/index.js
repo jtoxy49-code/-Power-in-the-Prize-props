@@ -10,6 +10,8 @@ import { refreshParkFactors } from "./park-factors.js";
 import { getParkFactors } from "./park-factors-static.js";
 import { getVenueCoords } from "./venue-coords.js";
 import { fetchWeatherForGame } from "./weather.js";
+import { refreshBatterExpectedStats } from "./batter-expected.js";
+import { refreshBatterSeasonStatsRaw } from "./batter-season.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -421,6 +423,47 @@ export default {
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
       }
+    }
+    if (url.pathname === "/debug/refresh-batter-expected") {
+      try {
+        await refreshBatterExpectedStats(env);
+        return new Response("Batter expected stats refresh ran successfully. Check /debug/batter-expected to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Batter expected stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/batter-expected") {
+      const data = await env.PROPS_DATA.get("stats:batters_expected");
+      return new Response(data || "No data yet — run /debug/refresh-batter-expected first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+
+    if (url.pathname === "/debug/refresh-batter-season") {
+      try {
+        await refreshBatterSeasonStatsRaw(env);
+        return new Response("Batter season shape check ran successfully. Check /debug/batter-season to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Batter season shape check failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/batter-season") {
+      const data = await env.PROPS_DATA.get("stats:batters_season_shape");
+      return new Response(data || "No data yet — run /debug/refresh-batter-season first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
     }
     // --- END DEBUG ROUTES ---
 
