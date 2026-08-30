@@ -608,6 +608,22 @@ export default {
         });
       }
     }
+    if (url.pathname === "/debug/pitch-hand") {
+      const id = url.searchParams.get("id") || "676083"; // Janson Junk from the boxscore test
+      const testUrl = `https://statsapi.mlb.com/api/v1/people/${id}`;
+      try {
+        const res = await fetch(testUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" } });
+        const raw = await res.json();
+        return new Response(JSON.stringify(raw?.people?.[0] || null, null, 2), {
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Pitch-hand test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
     // --- END DEBUG ROUTES ---
 
     return env.ASSETS.fetch(request);
