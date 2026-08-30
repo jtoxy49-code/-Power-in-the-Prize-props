@@ -33,6 +33,8 @@ function cleanGame(split) {
     walks: Number(s.baseOnBalls) || 0,
     hits_allowed: Number(s.hits) || 0,
     earned_runs: Number(s.earnedRuns) || 0,
+    pitches_thrown: Number(s.numberOfPitches) || 0,
+    batters_faced: Number(s.battersFaced) || 0,
   };
 }
 
