@@ -14,9 +14,10 @@ import { refreshBatterExpectedStats } from "./batter-expected.js";
 import { refreshBatterSeasonStats } from "./batter-season.js";
 import { buildMergedBatterStats } from "./batter-merge.js";
 import { refreshBatterPitchTypeStats, getTeamPitchTypeSplits } from "./batter-pitch-types.js";
-import { getTeamId } from "./team-ids.js";
+import { getTeamId, getTeamAbbreviation } from "./team-ids.js";
 import { getSameHandedStartersVsTeam } from "./same-handed.js";
 import { getCachedPitchMetrics } from "./pitch-metrics.js";
+import { getCachedTeamSplits } from "./team-plate-discipline.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -164,6 +165,37 @@ export default {
           headers: {
             "content-type": "application/json; charset=utf-8",
             "cache-control": "public, max-age=600",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/team-splits") {
+      const team = url.searchParams.get("team");
+      if (!team) {
+        return new Response('{"error":"missing team parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const abbrev = getTeamAbbreviation(team);
+      if (!abbrev) {
+        return new Response(JSON.stringify({ error: `no abbreviation found for team: ${team}` }), {
+          status: 404,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const data = await getCachedTeamSplits(env, abbrev);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=1800",
           },
         });
       } catch (err) {
