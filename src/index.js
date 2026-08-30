@@ -13,6 +13,7 @@ import { fetchWeatherForGame } from "./weather.js";
 import { refreshBatterExpectedStats } from "./batter-expected.js";
 import { refreshBatterSeasonStats } from "./batter-season.js";
 import { buildMergedBatterStats } from "./batter-merge.js";
+import { refreshBatterPitchTypeStats, getTeamPitchTypeSplits } from "./batter-pitch-types.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -88,6 +89,30 @@ export default {
           },
         }
       );
+    }
+
+    if (url.pathname === "/api/team-pitch-splits") {
+      const team = url.searchParams.get("team");
+      if (!team) {
+        return new Response('{"error":"missing team parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const splits = await getTeamPitchTypeSplits(env, team);
+        return new Response(JSON.stringify({ team, splits }), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=300",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
     }
 
     // --- Public API routes ---
@@ -512,6 +537,19 @@ export default {
         { headers: { "content-type": "application/json; charset=utf-8" } }
       );
     }
+    if (url.pathname === "/debug/refresh-batter-pitch-types") {
+      try {
+        await refreshBatterPitchTypeStats(env);
+        return new Response("Batter pitch-type stats refresh ran successfully.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Batter pitch-type stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
     // --- END DEBUG ROUTES ---
 
     return env.ASSETS.fetch(request);
@@ -530,6 +568,7 @@ export default {
             refreshArsenalStats(env),
             refreshBatterExpectedStats(env),
             refreshBatterSeasonStats(env),
+            refreshBatterPitchTypeStats(env),
           ]);
           await buildMergedStats(env);
           await buildMergedBatterStats(env);
