@@ -14,6 +14,8 @@ import { refreshBatterExpectedStats } from "./batter-expected.js";
 import { refreshBatterSeasonStats } from "./batter-season.js";
 import { buildMergedBatterStats } from "./batter-merge.js";
 import { refreshBatterPitchTypeStats, getTeamPitchTypeSplits } from "./batter-pitch-types.js";
+import { getTeamId } from "./team-ids.js";
+import { getSameHandedStartersVsTeam } from "./same-handed.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -105,6 +107,38 @@ export default {
           headers: {
             "content-type": "application/json; charset=utf-8",
             "cache-control": "public, max-age=300",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/same-handed") {
+      const team = url.searchParams.get("team");
+      const hand = url.searchParams.get("hand"); // "L" or "R"
+      if (!team || !hand) {
+        return new Response('{"error":"missing team or hand parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const teamId = getTeamId(team);
+      if (!teamId) {
+        return new Response(JSON.stringify({ error: `no team ID found for: ${team}` }), {
+          status: 404,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const starters = await getSameHandedStartersVsTeam(env, teamId, team, hand);
+        return new Response(JSON.stringify({ team, hand, starters }), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=600",
           },
         });
       } catch (err) {
