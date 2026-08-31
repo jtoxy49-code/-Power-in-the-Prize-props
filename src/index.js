@@ -19,6 +19,7 @@ import { getSameHandedStartersVsTeam } from "./same-handed.js";
 import { getCachedPitchMetrics } from "./pitch-metrics.js";
 import { getCachedTeamSplits } from "./team-plate-discipline.js";
 import { getCachedMatchup } from "./batter-vs-pitcher.js";
+import { getCachedPitcherSplits } from "./pitcher-splits.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -219,6 +220,31 @@ export default {
       }
       try {
         const data = await getCachedMatchup(env, batterId, pitcherId);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=1800",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/pitcher-splits") {
+      const id = url.searchParams.get("id");
+      const stand = url.searchParams.get("stand"); // optional "L" or "R", omit for overall
+      if (!id) {
+        return new Response('{"error":"missing id parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const data = await getCachedPitcherSplits(env, id, stand);
         return new Response(JSON.stringify(data), {
           headers: {
             "content-type": "application/json; charset=utf-8",
