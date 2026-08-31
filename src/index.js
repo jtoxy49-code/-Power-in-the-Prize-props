@@ -180,6 +180,7 @@ export default {
     if (url.pathname === "/api/team-splits") {
       const team = url.searchParams.get("team");
       const hand = url.searchParams.get("hand"); // optional "L" or "R"
+      const pitcherId = url.searchParams.get("pitcherId"); // optional — overrides hand if both given
       if (!team) {
         return new Response('{"error":"missing team parameter"}', {
           status: 400,
@@ -194,7 +195,7 @@ export default {
         });
       }
       try {
-        const data = await getCachedTeamSplits(env, abbrev, hand);
+        const data = await getCachedTeamSplits(env, abbrev, hand, pitcherId);
         return new Response(JSON.stringify(data), {
           headers: {
             "content-type": "application/json; charset=utf-8",
