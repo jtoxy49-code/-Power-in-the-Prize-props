@@ -53,12 +53,18 @@ function cleanRow(raw) {
     name: raw["last_name, first_name"] || "",
     pitch_type: raw["pitch_type"] || "",
     pitch_name: raw["pitch_name"] || "",
+    usage_pct: Number(raw["pitch_usage"]) || null,
     pitches: Number(raw["pitches"]) || 0,
     pa: Number(raw["pa"]) || 0,
     ba: Number(raw["ba"]) || null,
     est_ba: Number(raw["est_ba"]) || null,
+    slg: Number(raw["slg"]) || null,
+    est_slg: Number(raw["est_slg"]) || null,
+    woba: Number(raw["woba"]) || null,
+    est_woba: Number(raw["est_woba"]) || null,
     whiff_pct: Number(raw["whiff_percent"]) || null,
     k_pct: Number(raw["k_percent"]) || null,
+    put_away_pct: Number(raw["put_away"]) || null,
     hard_hit_pct: Number(raw["hard_hit_percent"]) || null,
   };
 }
@@ -102,13 +108,21 @@ export async function getTeamPitchTypeSplits(env, teamName) {
   const byPitchType = {};
   teamRows.forEach((r) => {
     if (!byPitchType[r.pitch_type]) {
-      byPitchType[r.pitch_type] = { pitch_type: r.pitch_type, pitch_name: r.pitch_name, total_pa: 0, weighted_ba: 0, weighted_whiff: 0, weighted_k: 0 };
+      byPitchType[r.pitch_type] = {
+        pitch_type: r.pitch_type, pitch_name: r.pitch_name, total_pa: 0,
+        weighted_ba: 0, weighted_est_ba: 0, weighted_woba: 0, weighted_est_woba: 0,
+        weighted_whiff: 0, weighted_k: 0, weighted_hard_hit: 0,
+      };
     }
     const bucket = byPitchType[r.pitch_type];
     bucket.total_pa += r.pa;
     bucket.weighted_ba += (r.ba || 0) * r.pa;
+    bucket.weighted_est_ba += (r.est_ba || 0) * r.pa;
+    bucket.weighted_woba += (r.woba || 0) * r.pa;
+    bucket.weighted_est_woba += (r.est_woba || 0) * r.pa;
     bucket.weighted_whiff += (r.whiff_pct || 0) * r.pa;
     bucket.weighted_k += (r.k_pct || 0) * r.pa;
+    bucket.weighted_hard_hit += (r.hard_hit_pct || 0) * r.pa;
   });
 
   return Object.values(byPitchType)
@@ -117,8 +131,13 @@ export async function getTeamPitchTypeSplits(env, teamName) {
       pitch_name: b.pitch_name,
       pa: b.total_pa,
       ba: b.total_pa > 0 ? +(b.weighted_ba / b.total_pa).toFixed(3) : null,
+      est_ba: b.total_pa > 0 ? +(b.weighted_est_ba / b.total_pa).toFixed(3) : null,
+      woba: b.total_pa > 0 ? +(b.weighted_woba / b.total_pa).toFixed(3) : null,
+      est_woba: b.total_pa > 0 ? +(b.weighted_est_woba / b.total_pa).toFixed(3) : null,
       whiff_pct: b.total_pa > 0 ? +(b.weighted_whiff / b.total_pa).toFixed(1) : null,
       k_pct: b.total_pa > 0 ? +(b.weighted_k / b.total_pa).toFixed(1) : null,
+      hard_hit_pct: b.total_pa > 0 ? +(b.weighted_hard_hit / b.total_pa).toFixed(1) : null,
+      bb_pct: null, // NOT available at pitch-type granularity — walks aren't attributable to a single pitch type in this data source. Left null rather than approximated.
     }))
     .sort((a, b) => b.pa - a.pa);
 }
