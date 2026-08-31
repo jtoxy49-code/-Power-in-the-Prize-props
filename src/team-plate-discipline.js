@@ -38,7 +38,7 @@ function parseCSV(text) {
  * getCachedTeamSplits). team= filter confirmed working on this
  * endpoint via live testing (unlike the leaderboard's broken filter).
  */
-async function fetchTeamBatterPitches(teamAbbrev, startDate, endDate) {
+async function fetchTeamBatterPitches(teamAbbrev, startDate, endDate, pitcherHand) {
   const params = new URLSearchParams({
     all: "true",
     hfGT: "R|",
@@ -56,6 +56,7 @@ async function fetchTeamBatterPitches(teamAbbrev, startDate, endDate) {
     min_abs: "0",
     type: "details",
   });
+  if (pitcherHand) params.set("pitcher_throws", pitcherHand);
   const url = `${STATCAST_SEARCH_BASE}?${params.toString()}`;
 
   const res = await fetch(url, {
@@ -177,6 +178,53 @@ function aggregateByPitchType(pitches) {
 }
 
 /**
+ * Aggregates raw pitches per-batter (overall, across all pitch
+ * types) — the Whiff%/Chase% numbers the batter-by-batter table
+ * needs, as opposed to the per-pitch-type breakdown above.
+ */
+function aggregateByBatter(pitches) {
+  const buckets = {};
+
+  pitches.forEach((p) => {
+    const id = p.batter;
+    if (!id) return;
+    if (!buckets[id]) {
+      buckets[id] = {
+        batter_id: id,
+        name: p.player_name || "",
+        total: 0,
+        out_zone: 0,
+        o_swings: 0,
+        swings: 0,
+        whiffs: 0,
+      };
+    }
+    const b = buckets[id];
+    const inZone = IN_ZONE.has(p.zone);
+    const isSwing = SWING_DESCRIPTIONS.has(p.description);
+    const isWhiff = WHIFF_DESCRIPTIONS.has(p.description);
+
+    b.total += 1;
+    if (!inZone) b.out_zone += 1;
+    if (isSwing) {
+      b.swings += 1;
+      if (!inZone) b.o_swings += 1;
+    }
+    if (isWhiff) b.whiffs += 1;
+  });
+
+  const pct = (num, den) => (den > 0 ? +(100 * num / den).toFixed(1) : null);
+
+  return Object.values(buckets).map((b) => ({
+    batter_id: b.batter_id,
+    name: b.name,
+    pitches_seen: b.total,
+    chase_pct: pct(b.o_swings, b.out_zone), // O-Swing% — chasing pitches outside the zone
+    whiff_pct: pct(b.whiffs, b.swings),
+  }));
+}
+
+/**
  * Entry point — cached per team since the underlying fetch (a whole
  * team's pitch-level data over 60 days) is heavy enough not to want
  * to repeat on every page view.
@@ -186,8 +234,8 @@ function aggregateByPitchType(pitches) {
  * are a "recent form" snapshot, not season-long totals like the
  * reference site shows.
  */
-export async function getCachedTeamSplits(env, teamAbbrev) {
-  const cacheKey = `team-splits:${teamAbbrev}`;
+export async function getCachedTeamSplits(env, teamAbbrev, pitcherHand) {
+  const cacheKey = pitcherHand ? `team-splits:${teamAbbrev}:${pitcherHand}` : `team-splits:${teamAbbrev}`;
   const cached = await env.PROPS_DATA.get(cacheKey, "json");
   if (cached && cached.fetched_at) {
     const ageMs = Date.now() - new Date(cached.fetched_at).getTime();
@@ -197,13 +245,16 @@ export async function getCachedTeamSplits(env, teamAbbrev) {
   const endDate = new Date().toISOString().slice(0, 10);
   const startDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const pitches = await fetchTeamBatterPitches(teamAbbrev, startDate, endDate);
+  const pitches = await fetchTeamBatterPitches(teamAbbrev, startDate, endDate, pitcherHand);
   const pitchTypes = aggregateByPitchType(pitches);
+  const batters = aggregateByBatter(pitches);
 
   const result = {
     team: teamAbbrev,
+    pitcher_hand_filter: pitcherHand || null,
     window: "last_60_days",
     pitch_types: pitchTypes,
+    batters,
     total_pitches_sampled: pitches.length,
     fetched_at: new Date().toISOString(),
   };
