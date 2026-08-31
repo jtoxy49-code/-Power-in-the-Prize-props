@@ -138,7 +138,8 @@ export default {
         });
       }
       try {
-        const starters = await getSameHandedStartersVsTeam(env, teamId, team, hand);
+        const forceRefresh = url.searchParams.has("bust");
+        const starters = await getSameHandedStartersVsTeam(env, teamId, team, hand, forceRefresh);
         return new Response(JSON.stringify({ team, hand, starters }), {
           headers: {
             "content-type": "application/json; charset=utf-8",
