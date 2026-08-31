@@ -18,6 +18,7 @@ import { getTeamId, getTeamAbbreviation } from "./team-ids.js";
 import { getSameHandedStartersVsTeam } from "./same-handed.js";
 import { getCachedPitchMetrics } from "./pitch-metrics.js";
 import { getCachedTeamSplits } from "./team-plate-discipline.js";
+import { getCachedMatchup } from "./batter-vs-pitcher.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -177,6 +178,7 @@ export default {
 
     if (url.pathname === "/api/team-splits") {
       const team = url.searchParams.get("team");
+      const hand = url.searchParams.get("hand"); // optional "L" or "R"
       if (!team) {
         return new Response('{"error":"missing team parameter"}', {
           status: 400,
@@ -191,7 +193,32 @@ export default {
         });
       }
       try {
-        const data = await getCachedTeamSplits(env, abbrev);
+        const data = await getCachedTeamSplits(env, abbrev, hand);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=1800",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/batter-vs-pitcher") {
+      const batterId = url.searchParams.get("batterId");
+      const pitcherId = url.searchParams.get("pitcherId");
+      if (!batterId || !pitcherId) {
+        return new Response('{"error":"missing batterId or pitcherId parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const data = await getCachedMatchup(env, batterId, pitcherId);
         return new Response(JSON.stringify(data), {
           headers: {
             "content-type": "application/json; charset=utf-8",
