@@ -50,6 +50,10 @@ async function getOpposingStarterForGame(game, teamId) {
     pitcher_id: starterId,
     pitcher_name: record.person?.fullName || "",
     date: game.officialDate,
+    // isTeamHome=true means the opponent (team we're researching) was
+    // home, so the starter we're looking at was the VISITING pitcher —
+    // i.e. this game was played at the opponent's park.
+    venue_relation: isTeamHome ? "at_opponent_park" : "at_starter_home_park",
     innings_pitched: pitching.inningsPitched ?? null,
     strikeouts: Number(pitching.strikeOuts) || 0,
     walks: Number(pitching.baseOnBalls) || 0,
