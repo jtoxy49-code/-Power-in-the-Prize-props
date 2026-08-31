@@ -38,7 +38,7 @@ function parseCSV(text) {
  * getCachedTeamSplits). team= filter confirmed working on this
  * endpoint via live testing (unlike the leaderboard's broken filter).
  */
-async function fetchTeamBatterPitches(teamAbbrev, startDate, endDate, pitcherHand) {
+async function fetchTeamBatterPitches(teamAbbrev, startDate, endDate, pitcherHand, specificPitcherId) {
   const params = new URLSearchParams({
     all: "true",
     hfGT: "R|",
@@ -57,7 +57,8 @@ async function fetchTeamBatterPitches(teamAbbrev, startDate, endDate, pitcherHan
     type: "details",
   });
   if (pitcherHand) params.set("pitcher_throws", pitcherHand);
-  const url = `${STATCAST_SEARCH_BASE}?${params.toString()}`;
+  let url = `${STATCAST_SEARCH_BASE}?${params.toString()}`;
+  if (specificPitcherId) url += `&pitchers_lookup[]=${specificPitcherId}`;
 
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" },
@@ -234,8 +235,12 @@ function aggregateByBatter(pitches) {
  * are a "recent form" snapshot, not season-long totals like the
  * reference site shows.
  */
-export async function getCachedTeamSplits(env, teamAbbrev, pitcherHand) {
-  const cacheKey = pitcherHand ? `team-splits:${teamAbbrev}:${pitcherHand}` : `team-splits:${teamAbbrev}`;
+export async function getCachedTeamSplits(env, teamAbbrev, pitcherHand, specificPitcherId) {
+  const cacheKeyParts = ["team-splits", teamAbbrev];
+  if (specificPitcherId) cacheKeyParts.push(`pitcher-${specificPitcherId}`);
+  else if (pitcherHand) cacheKeyParts.push(pitcherHand);
+  const cacheKey = cacheKeyParts.join(":");
+
   const cached = await env.PROPS_DATA.get(cacheKey, "json");
   if (cached && cached.fetched_at) {
     const ageMs = Date.now() - new Date(cached.fetched_at).getTime();
@@ -243,16 +248,21 @@ export async function getCachedTeamSplits(env, teamAbbrev, pitcherHand) {
   }
 
   const endDate = new Date().toISOString().slice(0, 10);
-  const startDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // When narrowing to one specific pitcher, a team only faces them a
+  // handful of times in any 60-day window — use a full season instead
+  // for a meaningful sample size.
+  const windowDays = specificPitcherId ? 240 : 60;
+  const startDate = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const pitches = await fetchTeamBatterPitches(teamAbbrev, startDate, endDate, pitcherHand);
+  const pitches = await fetchTeamBatterPitches(teamAbbrev, startDate, endDate, pitcherHand, specificPitcherId);
   const pitchTypes = aggregateByPitchType(pitches);
   const batters = aggregateByBatter(pitches);
 
   const result = {
     team: teamAbbrev,
     pitcher_hand_filter: pitcherHand || null,
-    window: "last_60_days",
+    specific_pitcher_id: specificPitcherId || null,
+    window: specificPitcherId ? "last_240_days" : "last_60_days",
     pitch_types: pitchTypes,
     batters,
     total_pitches_sampled: pitches.length,
