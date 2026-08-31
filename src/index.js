@@ -10,6 +10,8 @@ import { refreshParkFactors } from "./park-factors.js";
 import { getParkFactors } from "./park-factors-static.js";
 import { getVenueCoords } from "./venue-coords.js";
 import { fetchWeatherForGame } from "./weather.js";
+import { classifyWindForPark } from "./park-orientation.js";
+import { estimateWeatherHrImpact } from "./weather-hr-model.js";
 import { refreshBatterExpectedStats } from "./batter-expected.js";
 import { refreshBatterSeasonStats } from "./batter-season.js";
 import { buildMergedBatterStats } from "./batter-merge.js";
@@ -62,12 +64,21 @@ export default {
       }
       try {
         const weather = await fetchWeatherForGame(coords.lat, coords.lon, gameTime);
-        return new Response(JSON.stringify({ team, game_time: gameTime, weather }), {
-          headers: {
-            "content-type": "application/json; charset=utf-8",
-            "cache-control": "public, max-age=1800",
-          },
-        });
+        const wind = weather?.game_time
+          ? classifyWindForPark(team, weather.game_time.wind_direction_deg, weather.game_time.wind_mph)
+          : null;
+        const hrImpact = weather?.game_time
+          ? estimateWeatherHrImpact(weather.game_time.temperature_f, weather.game_time.wind_mph, wind?.label)
+          : null;
+        return new Response(
+          JSON.stringify({ team, game_time: gameTime, weather, wind, hr_impact_estimate: hrImpact }),
+          {
+            headers: {
+              "content-type": "application/json; charset=utf-8",
+              "cache-control": "public, max-age=1800",
+            },
+          }
+        );
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), {
           status: 500,
