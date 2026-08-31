@@ -74,12 +74,14 @@ async function fetchPitchHand(playerId) {
  * cheaply against this cached list, so switching between "same as
  * Snell (L)" and "same as Alcantara (R)" doesn't require refetching.
  */
-export async function getRecentStartersVsTeam(env, teamId, teamName) {
+export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefresh = false) {
   const cacheKey = `same-handed:${teamId}`;
-  const cached = await env.PROPS_DATA.get(cacheKey, "json");
-  if (cached && cached.fetched_at) {
-    const ageMs = Date.now() - new Date(cached.fetched_at).getTime();
-    if (ageMs < 6 * 60 * 60 * 1000) return cached;
+  if (!forceRefresh) {
+    const cached = await env.PROPS_DATA.get(cacheKey, "json");
+    if (cached && cached.fetched_at) {
+      const ageMs = Date.now() - new Date(cached.fetched_at).getTime();
+      if (ageMs < 6 * 60 * 60 * 1000) return cached;
+    }
   }
 
   const games = await fetchRecentCompletedGames(teamId);
@@ -105,7 +107,7 @@ export async function getRecentStartersVsTeam(env, teamId, teamName) {
 /**
  * Returns just the starters matching a given hand, most recent first.
  */
-export async function getSameHandedStartersVsTeam(env, teamId, teamName, hand) {
-  const data = await getRecentStartersVsTeam(env, teamId, teamName);
+export async function getSameHandedStartersVsTeam(env, teamId, teamName, hand, forceRefresh = false) {
+  const data = await getRecentStartersVsTeam(env, teamId, teamName, forceRefresh);
   return data.starters.filter((s) => s.hand === hand);
 }
