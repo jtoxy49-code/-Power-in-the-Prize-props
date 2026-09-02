@@ -800,7 +800,7 @@ body{
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
         <div>
           <div class="date-card-label">Game date</div>
-          <input class="date-input" type="date" value="2026-08-23">
+          <input class="date-input" id="schedule-date-input" type="date">
         </div>
       </div>
 
@@ -1264,40 +1264,85 @@ async function loadProps() {
 
 loadProps();
 
-/* ---------------- Fake schedule data ---------------- */
-const scheduleData = [
-  { away:"TB", home:"BAL", awayName:"Tampa Bay Rays", homeName:"Baltimore Orioles", awaySP:"N. Estevez", homeSP:"S. Halloway", id:"#824799" },
-  { away:"STL", home:"PHI", awayName:"St. Louis Cardinals", homeName:"Philadelphia Phillies", awaySP:"K. Duran", homeSP:"C. Marchetti", id:"#823421" },
-  { away:"TOR", home:"NYY", awayName:"Toronto Blue Jays", homeName:"New York Yankees", awaySP:"J. Osei", homeSP:"C. Reyes", id:"#823507" },
-  { away:"WSH", home:"MIA", awayName:"Washington Nationals", homeName:"Miami Marlins", awaySP:"J. Kent", homeSP:"Mason Reyes", id:"#823827" },
-  { away:"DET", home:"KC", awayName:"Detroit Tigers", homeName:"Kansas City Royals", awaySP:"J. Waguespack", homeSP:"D. Lynch IV", id:"#824071" },
-  { away:"ATH", home:"HOU", awayName:"Athletics", homeName:"Houston Astros", awaySP:"B. Basso", homeSP:"C. Javier", id:"#824150" },
-];
+/* ---------------- Live schedule/lineups (from /api/lineups) ---------------- */
+const TEAM_ABBR = {
+  "Los Angeles Angels":"LAA","Arizona Diamondbacks":"AZ","Baltimore Orioles":"BAL","Boston Red Sox":"BOS",
+  "Chicago Cubs":"CHC","Cincinnati Reds":"CIN","Cleveland Guardians":"CLE","Colorado Rockies":"COL",
+  "Detroit Tigers":"DET","Houston Astros":"HOU","Kansas City Royals":"KC","Los Angeles Dodgers":"LAD",
+  "Washington Nationals":"WSH","New York Mets":"NYM","Athletics":"ATH","Pittsburgh Pirates":"PIT",
+  "San Diego Padres":"SD","Seattle Mariners":"SEA","San Francisco Giants":"SF","St. Louis Cardinals":"STL",
+  "Tampa Bay Rays":"TB","Texas Rangers":"TEX","Toronto Blue Jays":"TOR","Minnesota Twins":"MIN",
+  "Philadelphia Phillies":"PHI","Atlanta Braves":"ATL","Chicago White Sox":"CWS","Miami Marlins":"MIA",
+  "New York Yankees":"NYY","Milwaukee Brewers":"MIL",
+};
+const abbr = (name) => TEAM_ABBR[name] || name.slice(0, 3).toUpperCase();
+
+function formatGameTime(iso) {
+  try {
+    return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  } catch { return ''; }
+}
 
 const scheduleGrid = document.getElementById('schedule-grid');
-scheduleData.forEach(g => {
-  const card = document.createElement('div');
-  card.className = 'matchup-card';
-  card.innerHTML = `
-    <div class="matchup-head">
-      <div class="matchup-teams">${g.away}<span>@</span>${g.home}</div>
-      <div class="matchup-id">${g.id}</div>
-    </div>
-    <div class="matchup-sides">
-      <div class="matchup-side">
-        <div class="matchup-team-name">${g.awayName}</div>
-        <div class="matchup-sp"><span>SP:</span> ${g.awaySP}</div>
+const dateInput = document.getElementById('schedule-date-input');
+
+async function loadSchedule(date) {
+  scheduleGrid.innerHTML = '<div style="padding:24px 4px;color:var(--text-faint);font-size:13px;">Loading schedule&hellip;</div>';
+
+  let payload;
+  try {
+    const res = await fetch(`/api/lineups?date=${date}`);
+    payload = await res.json();
+  } catch (err) {
+    scheduleGrid.innerHTML = '<div style="padding:24px 4px;color:var(--text-faint);font-size:13px;">Couldn\'t load the schedule. Try again.</div>';
+    return;
+  }
+
+  const games = payload.games || [];
+  scheduleGrid.innerHTML = '';
+
+  if (games.length === 0) {
+    scheduleGrid.innerHTML = '<div style="padding:24px 4px;color:var(--text-faint);font-size:13px;">No MLB games scheduled this day.</div>';
+    return;
+  }
+
+  games.forEach((g) => {
+    const card = document.createElement('div');
+    card.className = 'matchup-card';
+    const awayAbbr = abbr(g.away_team);
+    const homeAbbr = abbr(g.home_team);
+    card.innerHTML = `
+      <div class="matchup-head">
+        <div class="matchup-teams">${awayAbbr}<span>@</span>${homeAbbr}</div>
+        <div class="matchup-id">${formatGameTime(g.game_time)}</div>
       </div>
-      <div class="matchup-side">
-        <div class="matchup-team-name">${g.homeName}</div>
-        <div class="matchup-sp"><span>SP:</span> ${g.homeSP}</div>
+      <div class="matchup-sides">
+        <div class="matchup-side">
+          <div class="matchup-team-name">${g.away_team}</div>
+          <div class="matchup-sp"><span>SP:</span> ${g.away_probable_pitcher || 'TBD'}</div>
+        </div>
+        <div class="matchup-side">
+          <div class="matchup-team-name">${g.home_team}</div>
+          <div class="matchup-sp"><span>SP:</span> ${g.home_probable_pitcher || 'TBD'}</div>
+        </div>
       </div>
-    </div>
-    <div class="matchup-btns">
-      <div class="matchup-btn" onclick="goPage('detail')">View ${g.away} lineup</div>
-      <div class="matchup-btn" onclick="goPage('detail')">View ${g.home} lineup</div>
-    </div>
-  `;
+      <div class="matchup-btns">
+        <div class="matchup-btn" onclick="goPage('detail')">View ${awayAbbr} lineup${g.away_lineup_confirmed ? '' : ' (TBD)'}</div>
+        <div class="matchup-btn" onclick="goPage('detail')">View ${homeAbbr} lineup${g.home_lineup_confirmed ? '' : ' (TBD)'}</div>
+      </div>
+    `;
+    scheduleGrid.appendChild(card);
+  });
+}
+
+// Default the date picker to today, then load that day's schedule.
+const todayStr = new Date().toISOString().slice(0, 10);
+dateInput.value = todayStr;
+loadSchedule(todayStr);
+
+dateInput.addEventListener('change', () => {
+  if (dateInput.value) loadSchedule(dateInput.value);
+});
   scheduleGrid.appendChild(card);
 });
 
