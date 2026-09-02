@@ -46,13 +46,12 @@ function cleanGame(g) {
 }
 
 /**
- * Entry point — fetches and cleans today's games. Cached briefly in
- * KV (10 min) since lineups can post/confirm at any point during
- * the day, and this is cheap enough to refetch often without
- * needing its own dedicated cron.
+ * Entry point — fetches and cleans games for a given date (defaults
+ * to today). Cached briefly in KV (10 min) since lineups can
+ * post/confirm at any point during the day.
  */
-export async function getTodaysLineups(env) {
-  const date = new Date().toISOString().slice(0, 10);
+export async function getLineupsForDate(env, dateOverride) {
+  const date = dateOverride || new Date().toISOString().slice(0, 10);
   const cacheKey = `lineups:${date}`;
 
   const cached = await env.PROPS_DATA.get(cacheKey, "json");
