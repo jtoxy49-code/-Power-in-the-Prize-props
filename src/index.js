@@ -5,7 +5,7 @@ import { refreshSeasonStats } from "./season-stats.js";
 import { buildMergedStats, normalizeName } from "./merge.js";
 import { fetchGameLog, getCachedGameLog } from "./gamelog.js";
 import { refreshArsenalStats } from "./pitch-arsenal.js";
-import { fetchLineupsForDate, getTodaysLineups } from "./lineups.js";
+import { fetchLineupsForDate, getLineupsForDate } from "./lineups.js";
 import { refreshParkFactors } from "./park-factors.js";
 import { getParkFactors } from "./park-factors-static.js";
 import { getVenueCoords } from "./venue-coords.js";
@@ -341,8 +341,9 @@ export default {
     }
 
     if (url.pathname === "/api/lineups") {
+      const dateParam = url.searchParams.get("date"); // optional YYYY-MM-DD, defaults to today
       try {
-        const data = await getTodaysLineups(env);
+        const data = await getLineupsForDate(env, dateParam);
         return new Response(JSON.stringify(data), {
           headers: {
             "content-type": "application/json; charset=utf-8",
