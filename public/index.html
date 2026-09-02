@@ -326,6 +326,7 @@ body{
   cursor:pointer;
 }
 .chip:hover{ background:var(--surface-2); color:var(--text); }
+.chip.active{ background:var(--gold); border-color:var(--gold); color:#3A2900; }
 .chip.clear{ color:var(--red); border-color:transparent; background:none; }
 
 .props-table{ background:var(--surface); border:1px solid var(--border-soft); border-radius:12px; overflow:hidden; }
@@ -768,7 +769,7 @@ body{
         <div class="chip">Teams</div>
         <div class="chip">Games</div>
         <div class="chip">Pitchers</div>
-        <div class="chip">Propositions (5)</div>
+        <div class="chip active" id="main-lines-toggle">Main lines only</div>
         <div class="chip">Over/Under</div>
         <div class="chip">Odds</div>
         <div class="chip clear">&times; Clear all</div>
@@ -1197,6 +1198,18 @@ function initialsFor(name) {
 
 const propsTable = document.getElementById('props-table');
 
+let allProps = [];
+let mainLinesOnly = true;
+
+const MARKET_TO_STATKEY = {
+  player_strikeouts: "strikeouts",
+  player_hits_allowed: "hits_allowed",
+  player_earned_runs: "earned_runs",
+  player_earned_runs_allowed: "earned_runs",
+  player_walks_allowed: "walks",
+  player_outs_recorded: "outs",
+};
+
 async function loadProps() {
   propsTable.insertAdjacentHTML('beforeend',
     '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">Loading live odds&hellip;</div>');
@@ -1210,23 +1223,24 @@ async function loadProps() {
     return;
   }
 
+  allProps = payload.props || [];
+  renderPropsRows();
+}
+
+function renderPropsRows() {
   propsTable.querySelectorAll('.prop-row, div[style]').forEach((el) => el.remove());
 
-  const props = payload.props || [];
+  // A prop counts as "main line" if any book flags it that way —
+  // books occasionally disagree on which line is the main one.
+  const props = mainLinesOnly
+    ? allProps.filter((p) => p.books.some((b) => b.is_main_line))
+    : allProps;
+
   if (props.length === 0) {
     propsTable.insertAdjacentHTML('beforeend',
       '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">No pitcher props posted yet for today\'s slate &mdash; check back closer to game time.</div>');
     return;
   }
-
-const MARKET_TO_STATKEY = {
-  player_strikeouts: "strikeouts",
-  player_hits_allowed: "hits_allowed",
-  player_earned_runs: "earned_runs",
-  player_earned_runs_allowed: "earned_runs",
-  player_walks_allowed: "walks",
-  player_outs_recorded: "outs",
-};
 
   props.forEach((p) => {
     const bestOdds = Math.max(...p.books.map((b) => b.odds_american));
@@ -1266,6 +1280,12 @@ const MARKET_TO_STATKEY = {
     propsTable.appendChild(row);
   });
 }
+
+document.getElementById('main-lines-toggle').addEventListener('click', function () {
+  mainLinesOnly = !mainLinesOnly;
+  this.classList.toggle('active', mainLinesOnly);
+  renderPropsRows();
+});
 
 loadProps();
 
