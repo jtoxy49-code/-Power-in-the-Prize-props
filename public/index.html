@@ -817,11 +817,11 @@ body{
 
       <div class="detail-hero">
         <div class="detail-player">
-          <div class="detail-avatar">MR</div>
+          <div class="detail-avatar" id="detail-avatar">MR</div>
           <div>
-            <div class="detail-name">Mason Reyes (RHP)</div>
-            <div class="detail-matchup">Miami Marlins @ Atlanta Braves &middot; Today 7:20 PM ET</div>
-            <div class="detail-market">Pitcher Strikeouts &middot; Over 6.5</div>
+            <div class="detail-name" id="detail-name">Mason Reyes (RHP)</div>
+            <div class="detail-matchup" id="detail-matchup">Miami Marlins @ Atlanta Braves &middot; Today 7:20 PM ET</div>
+            <div class="detail-market" id="detail-market">Pitcher Strikeouts &middot; Over 6.5</div>
           </div>
         </div>
         <div class="btn-row">
@@ -1054,20 +1054,9 @@ body{
           </div>
 
           <div class="card">
-            <div class="card-title">Mason Reyes &middot; statistics</div>
-            <table class="data-table">
+            <div class="card-title" id="stats-card-title">Mason Reyes &middot; statistics</div>
+            <table class="data-table" id="stats-table">
               <tr><th>STAT</th><th>2026</th><th>MLB AVG</th></tr>
-              <tr><td class="name-cell">Barrel%</td><td class="pos">5.8%</td><td>7.6%</td></tr>
-              <tr><td class="name-cell">Sweet-Spot%</td><td class="pos">31.4%</td><td>33.3%</td></tr>
-              <tr><td class="name-cell">BA</td><td class="pos">.213</td><td>.248</td></tr>
-              <tr><td class="name-cell">xBA</td><td class="pos">.221</td><td>.243</td></tr>
-              <tr><td class="name-cell">xSLG</td><td class="pos">.348</td><td>.407</td></tr>
-              <tr><td class="name-cell">wOBA</td><td class="pos">.289</td><td>.315</td></tr>
-              <tr><td class="name-cell">HardHit%</td><td class="pos">33.2%</td><td>37.1%</td></tr>
-              <tr><td class="name-cell">K%</td><td class="pos">27.9%</td><td>22.2%</td></tr>
-              <tr><td class="name-cell">BB%</td><td>7.8%</td><td>8.4%</td></tr>
-              <tr><td class="name-cell">ERA / FIP</td><td>3.42 / 3.61</td><td>&mdash;</td></tr>
-              <tr><td class="name-cell">WHIP</td><td>1.19</td><td>&mdash;</td></tr>
             </table>
           </div>
 
@@ -1239,7 +1228,11 @@ async function loadProps() {
 
     const row = document.createElement('div');
     row.className = 'prop-row';
-    row.onclick = () => goPage('detail');
+    row.onclick = () => viewPitcher({
+      name: p.player_name,
+      matchup: matchup,
+      market: marketText,
+    });
     row.innerHTML = `
       <div class="prop-player">
         <div class="prop-avatar">${initialsFor(p.player_name)}</div>
@@ -1327,8 +1320,8 @@ async function loadSchedule(date) {
         </div>
       </div>
       <div class="matchup-btns">
-        <div class="matchup-btn" onclick="goPage('detail')">View ${awayAbbr} lineup${g.away_lineup_confirmed ? '' : ' (TBD)'}</div>
-        <div class="matchup-btn" onclick="goPage('detail')">View ${homeAbbr} lineup${g.home_lineup_confirmed ? '' : ' (TBD)'}</div>
+        <div class="matchup-btn" onclick='viewPitcher({name: ${JSON.stringify(g.away_probable_pitcher || "")}, matchup: ${JSON.stringify(g.away_team + " @ " + g.home_team)}, market: "Season overview"})'>View ${awayAbbr} lineup${g.away_lineup_confirmed ? '' : ' (TBD)'}</div>
+        <div class="matchup-btn" onclick='viewPitcher({name: ${JSON.stringify(g.home_probable_pitcher || "")}, matchup: ${JSON.stringify(g.away_team + " @ " + g.home_team)}, market: "Season overview"})'>View ${homeAbbr} lineup${g.home_lineup_confirmed ? '' : ' (TBD)'}</div>
       </div>
     `;
     scheduleGrid.appendChild(card);
@@ -1343,6 +1336,88 @@ loadSchedule(todayStr);
 dateInput.addEventListener('change', () => {
   if (dateInput.value) loadSchedule(dateInput.value);
 });
+
+/* ---------------- Pitcher detail page wiring ---------------- */
+let currentPitcher = null;
+
+async function viewPitcher(ctx) {
+  currentPitcher = ctx;
+  goPage('detail');
+  await loadPitcherDetail();
+}
+
+// Static, well-known current MLB league-average reference values —
+// not live-fetched, used only for the pos/neg comparison column.
+const LEAGUE_AVG = {
+  barrel_pct: 7.6, sweet_spot_pct: 33.3, ba: 0.248, est_ba: 0.243, est_slg: 0.407,
+  woba: 0.315, hard_hit_pct: 37.1, k_pct: 22.2, bb_pct: 8.4,
+};
+
+function statRow(label, actual, avg, format, lowerIsBetter) {
+  if (actual == null) {
+    return `<tr><td class="name-cell">${label}</td><td>&mdash;</td><td>${avg != null ? format(avg) : '&mdash;'}</td></tr>`;
+  }
+  let cls = '';
+  if (avg != null) {
+    const better = lowerIsBetter ? actual < avg : actual > avg;
+    cls = better ? 'pos' : 'neg';
+  }
+  return `<tr><td class="name-cell">${label}</td><td class="${cls}">${format(actual)}</td><td>${avg != null ? format(avg) : '&mdash;'}</td></tr>`;
+}
+
+function renderStatisticsTable(stats) {
+  const pctFmt = (v) => v.toFixed(1) + '%';
+  const avgFmt = (v) => v.toFixed(3).replace(/^0/, '');
+
+  const barrels = stats.barrels || {};
+  const expected = stats.expected || {};
+  const season = stats.season || {};
+
+  let rows = '<tr><th>STAT</th><th>2026</th><th>MLB AVG</th></tr>';
+  rows += statRow('Barrel%', barrels.barrel_pct, LEAGUE_AVG.barrel_pct, pctFmt, true);
+  rows += statRow('Sweet-Spot%', barrels.sweet_spot_pct, LEAGUE_AVG.sweet_spot_pct, pctFmt, true);
+  rows += statRow('BA', expected.ba, LEAGUE_AVG.ba, avgFmt, true);
+  rows += statRow('xBA', expected.est_ba, LEAGUE_AVG.est_ba, avgFmt, true);
+  rows += statRow('xSLG', expected.est_slg, LEAGUE_AVG.est_slg, avgFmt, true);
+  rows += statRow('wOBA', expected.woba, LEAGUE_AVG.woba, avgFmt, true);
+  rows += statRow('HardHit%', barrels.hard_hit_pct, LEAGUE_AVG.hard_hit_pct, pctFmt, true);
+  rows += statRow('K%', season.k_pct, LEAGUE_AVG.k_pct, pctFmt, false);
+  rows += statRow('BB%', season.bb_pct, LEAGUE_AVG.bb_pct, pctFmt, true);
+  rows += `<tr><td class="name-cell">ERA / FIP</td><td>${season.era != null ? season.era.toFixed(2) : '&mdash;'} / N/A</td><td>&mdash;</td></tr>`;
+  rows += `<tr><td class="name-cell">WHIP</td><td>${season.whip != null ? season.whip.toFixed(2) : '&mdash;'}</td><td>&mdash;</td></tr>`;
+
+  document.getElementById('stats-table').innerHTML = rows;
+}
+
+async function loadPitcherDetail() {
+  if (!currentPitcher || !currentPitcher.name) return;
+
+  document.getElementById('detail-avatar').textContent = initialsFor(currentPitcher.name);
+  document.getElementById('detail-name').textContent = currentPitcher.name;
+  document.getElementById('detail-matchup').textContent = currentPitcher.matchup || '';
+  document.getElementById('detail-market').textContent = currentPitcher.market || '';
+
+  document.getElementById('stats-card-title').textContent = `${currentPitcher.name} \u00b7 statistics`;
+  const statsTable = document.getElementById('stats-table');
+  statsTable.innerHTML = '<tr><th>STAT</th><th>2026</th><th>MLB AVG</th></tr><tr><td colspan="3" style="color:var(--text-faint);padding:16px 8px;">Loading&hellip;</td></tr>';
+
+  let payload;
+  try {
+    const res = await fetch(`/api/pitcher?name=${encodeURIComponent(currentPitcher.name)}`);
+    payload = await res.json();
+  } catch (err) {
+    statsTable.innerHTML = '<tr><th>STAT</th><th>2026</th><th>MLB AVG</th></tr><tr><td colspan="3" style="color:var(--text-faint);padding:16px 8px;">Couldn\'t load stats.</td></tr>';
+    return;
+  }
+
+  if (!payload.matched || !payload.stats) {
+    statsTable.innerHTML = '<tr><th>STAT</th><th>2026</th><th>MLB AVG</th></tr><tr><td colspan="3" style="color:var(--text-faint);padding:16px 8px;">No stats found for this pitcher yet.</td></tr>';
+    return;
+  }
+
+  currentPitcher.player_id = payload.stats.player_id;
+  renderStatisticsTable(payload.stats);
+}
 
 /* ---------------- Fake bar chart ---------------- */
 const games = [
