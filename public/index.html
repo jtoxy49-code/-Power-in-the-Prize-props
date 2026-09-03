@@ -1028,20 +1028,20 @@ body{
           <div class="card">
             <div class="card-title">Game info</div>
             <div class="info-grid">
-              <div class="info-cell"><div class="info-label">WIND</div><div class="info-val">9 mph</div><div style="font-size:10px;color:var(--text-faint);">OUT TO LF</div></div>
-              <div class="info-cell"><div class="info-label">FORECAST</div><div class="info-val">88&deg;F</div><div style="font-size:10px;color:var(--text-faint);">Clear</div></div>
-              <div class="info-cell"><div class="info-label">HUMIDITY</div><div class="info-val">51%</div><div style="font-size:10px;color:var(--text-faint);">Normal</div></div>
+              <div class="info-cell"><div class="info-label">WIND</div><div class="info-val" id="wind-val">&mdash;</div><div style="font-size:10px;color:var(--text-faint);" id="wind-dir">&mdash;</div></div>
+              <div class="info-cell"><div class="info-label">FORECAST</div><div class="info-val" id="forecast-val">&mdash;</div><div style="font-size:10px;color:var(--text-faint);" id="forecast-cond">&mdash;</div></div>
+              <div class="info-cell"><div class="info-label">HUMIDITY</div><div class="info-val" id="humidity-val">&mdash;</div><div style="font-size:10px;color:var(--text-faint);">&nbsp;</div></div>
             </div>
-            <div class="weather-badge">&#9889; WEATHER +6% HR</div>
+            <div class="weather-badge" id="weather-badge" style="display:none;"></div>
           </div>
 
           <div class="card">
-            <div class="card-title">Park factors &middot; Truist Park</div>
-            <div class="park-row">
-              <div class="park-chip up"><div class="lbl">HR</div><div class="val">+11%</div></div>
-              <div class="park-chip down"><div class="lbl">2B/3B</div><div class="val">-4%</div></div>
-              <div class="park-chip down"><div class="lbl">1B</div><div class="val">-1%</div></div>
-              <div class="park-chip up"><div class="lbl">RUNS</div><div class="val">+5%</div></div>
+            <div class="card-title" id="park-factors-title">Park factors</div>
+            <div class="park-row" id="park-factors-row">
+              <div class="park-chip"><div class="lbl">HR</div><div class="val">&mdash;</div></div>
+              <div class="park-chip"><div class="lbl">2B/3B</div><div class="val">&mdash;</div></div>
+              <div class="park-chip"><div class="lbl">1B</div><div class="val">&mdash;</div></div>
+              <div class="park-chip"><div class="lbl">RUNS</div><div class="val">&mdash;</div></div>
             </div>
             <div class="diamond-wrap">
               <svg width="130" height="110" viewBox="0 0 130 110">
@@ -1049,7 +1049,7 @@ body{
                 <circle cx="65" cy="58" r="3" fill="var(--gold)"/>
               </svg>
             </div>
-            <div style="text-align:center;font-size:11px;color:var(--text-faint);">Truist Park &middot; Atlanta, GA</div>
+            <div style="text-align:center;font-size:11px;color:var(--text-faint);" id="park-venue-label" title="Park factors are historical/approximate reference values, not live-computed data.">&mdash;</div>
           </div>
 
           <div class="card">
@@ -1249,6 +1249,8 @@ function renderPropsRows() {
       selection: p.selection,
       statKey: MARKET_TO_STATKEY[p.market_type] || "strikeouts",
       opponent: opponent,
+      home_team: p.home_team,
+      game_time: p.event_start_time,
     });
     row.innerHTML = `
       <div class="prop-player">
@@ -1343,8 +1345,8 @@ async function loadSchedule(date) {
         </div>
       </div>
       <div class="matchup-btns">
-        <div class="matchup-btn" onclick='viewPitcher({name: ${JSON.stringify(g.away_probable_pitcher || "")}, matchup: ${JSON.stringify(g.away_team + " @ " + g.home_team)}, market: "Season overview", opponent: ${JSON.stringify(g.home_team)}})'>View ${awayAbbr} lineup${g.away_lineup_confirmed ? '' : ' (TBD)'}</div>
-        <div class="matchup-btn" onclick='viewPitcher({name: ${JSON.stringify(g.home_probable_pitcher || "")}, matchup: ${JSON.stringify(g.away_team + " @ " + g.home_team)}, market: "Season overview", opponent: ${JSON.stringify(g.away_team)}})'>View ${homeAbbr} lineup${g.home_lineup_confirmed ? '' : ' (TBD)'}</div>
+        <div class="matchup-btn" onclick='viewPitcher({name: ${JSON.stringify(g.away_probable_pitcher || "")}, matchup: ${JSON.stringify(g.away_team + " @ " + g.home_team)}, market: "Season overview", opponent: ${JSON.stringify(g.home_team)}, home_team: ${JSON.stringify(g.home_team)}, game_time: ${JSON.stringify(g.game_time)}})'>View ${awayAbbr} lineup${g.away_lineup_confirmed ? '' : ' (TBD)'}</div>
+        <div class="matchup-btn" onclick='viewPitcher({name: ${JSON.stringify(g.home_probable_pitcher || "")}, matchup: ${JSON.stringify(g.away_team + " @ " + g.home_team)}, market: "Season overview", opponent: ${JSON.stringify(g.away_team)}, home_team: ${JSON.stringify(g.home_team)}, game_time: ${JSON.stringify(g.game_time)}})'>View ${homeAbbr} lineup${g.home_lineup_confirmed ? '' : ' (TBD)'}</div>
       </div>
     `;
     scheduleGrid.appendChild(card);
@@ -1500,6 +1502,74 @@ document.getElementById('pitcher-hand-tab-row').addEventListener('click', (e) =>
   loadPitcherSplits(pill.dataset.hand);
 });
 
+function weatherCodeLabel(code) {
+  if (code == null) return '';
+  if (code === 0) return 'Clear';
+  if (code <= 3) return 'Partly cloudy';
+  if (code === 45 || code === 48) return 'Fog';
+  if (code >= 51 && code <= 67) return 'Rain';
+  if (code >= 71 && code <= 77) return 'Snow';
+  if (code >= 80 && code <= 82) return 'Showers';
+  if (code >= 95) return 'Storms';
+  return 'Clear';
+}
+
+async function loadGameInfo() {
+  const homeTeam = currentPitcher.home_team;
+  const gameTime = currentPitcher.game_time;
+
+  // --- Weather ---
+  if (homeTeam && gameTime) {
+    try {
+      const res = await fetch(`/api/weather?team=${encodeURIComponent(homeTeam)}&game_time=${encodeURIComponent(gameTime)}`);
+      const payload = await res.json();
+      const gt = payload.weather?.game_time;
+      if (gt) {
+        document.getElementById('wind-val').textContent = gt.wind_mph != null ? `${Math.round(gt.wind_mph)} mph` : '\u2014';
+        document.getElementById('wind-dir').textContent = payload.wind?.label || '';
+        document.getElementById('forecast-val').innerHTML = gt.temperature_f != null ? `${Math.round(gt.temperature_f)}&deg;F` : '\u2014';
+        document.getElementById('forecast-cond').textContent = weatherCodeLabel(gt.weather_code);
+        document.getElementById('humidity-val').textContent = gt.humidity_pct != null ? `${Math.round(gt.humidity_pct)}%` : '\u2014';
+      }
+      const badge = document.getElementById('weather-badge');
+      const hr = payload.hr_impact_estimate;
+      if (hr && hr.estimated_hr_pct_change != null) {
+        const sign = hr.estimated_hr_pct_change >= 0 ? '+' : '';
+        badge.style.display = '';
+        badge.innerHTML = `&#9889; WEATHER ${sign}${hr.estimated_hr_pct_change}% HR (est.)`;
+        badge.title = hr.warning || '';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch (err) {
+      document.getElementById('wind-val').textContent = '\u2014';
+    }
+  }
+
+  // --- Park factors ---
+  if (homeTeam) {
+    document.getElementById('park-factors-title').textContent = `Park factors \u00b7 ${homeTeam}`;
+    try {
+      const res = await fetch(`/api/park-factors?team=${encodeURIComponent(homeTeam)}`);
+      const payload = await res.json();
+      const f = payload.factors;
+      if (f) {
+        const chip = (label, val) => {
+          const pct = val - 100;
+          const sign = pct >= 0 ? '+' : '';
+          const cls = pct > 0 ? 'up' : pct < 0 ? 'down' : '';
+          return `<div class="park-chip ${cls}"><div class="lbl">${label}</div><div class="val">${sign}${pct}%</div></div>`;
+        };
+        document.getElementById('park-factors-row').innerHTML =
+          chip('HR', f.hr) + chip('2B/3B', f.doubles_triples) + chip('1B', f.singles) + chip('RUNS', f.runs);
+        document.getElementById('park-venue-label').textContent = `${f.venue} (approx.)`;
+      }
+    } catch (err) {
+      // leave placeholders
+    }
+  }
+}
+
 async function loadPitcherDetail() {
   if (!currentPitcher || !currentPitcher.name) return;
 
@@ -1532,6 +1602,7 @@ async function loadPitcherDetail() {
   renderArsenalTable(payload.stats);
   loadGameLogAndMetrics();
   loadPitcherSplits('');
+  loadGameInfo();
 }
 
 /* ---------------- Real hit-rate chart (gamelog + pitch-metrics) ---------------- */
