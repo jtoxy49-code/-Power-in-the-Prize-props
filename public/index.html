@@ -1044,9 +1044,14 @@ body{
               <div class="park-chip"><div class="lbl">RUNS</div><div class="val">&mdash;</div></div>
             </div>
             <div class="diamond-wrap">
-              <svg width="130" height="110" viewBox="0 0 130 110">
-                <polygon points="65,10 118,58 65,100 12,58" fill="none" stroke="#3A3350" stroke-width="2"/>
-                <circle cx="65" cy="58" r="3" fill="var(--gold)"/>
+              <svg width="180" height="150" viewBox="0 0 200 170">
+                <path d="M 100 155 L 20 55 A 115 115 0 0 1 180 55 Z" fill="#2E7D46"/>
+                <path d="M 100 155 L 55 95 A 63 63 0 0 1 145 95 Z" fill="#C9A15E"/>
+                <path d="M 100 128 L 78 100 A 30 30 0 0 1 122 100 Z" fill="#2E7D46"/>
+                <line x1="100" y1="155" x2="20" y2="55" stroke="#F4F1FA" stroke-width="1.5" opacity="0.5"/>
+                <line x1="100" y1="155" x2="180" y2="55" stroke="#F4F1FA" stroke-width="1.5" opacity="0.5"/>
+                <rect x="96" y="149" width="8" height="8" fill="#F4F1FA" transform="rotate(45 100 153)"/>
+                <circle cx="100" cy="112" r="4" fill="#C9A15E" stroke="#8a6d3b" stroke-width="1"/>
               </svg>
             </div>
             <div style="text-align:center;font-size:11px;color:var(--text-faint);" id="park-venue-label" title="Park factors are historical/approximate reference values, not live-computed data.">&mdash;</div>
@@ -1191,6 +1196,7 @@ const propsTable = document.getElementById('props-table');
 
 let allProps = [];
 let mainLinesOnly = true;
+let gameTimeByMatchup = {};
 
 const MARKET_TO_STATKEY = {
   player_strikeouts: "strikeouts",
@@ -1205,14 +1211,26 @@ async function loadProps() {
   propsTable.insertAdjacentHTML('beforeend',
     '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">Loading live odds&hellip;</div>');
 
-  let payload;
+  let payload, lineupsPayload;
   try {
-    const res = await fetch('/api/odds');
-    payload = await res.json();
+    const [oddsRes, lineupsRes] = await Promise.all([
+      fetch('/api/odds'),
+      fetch('/api/lineups'),
+    ]);
+    payload = await oddsRes.json();
+    lineupsPayload = await lineupsRes.json();
   } catch (err) {
     propsTable.innerHTML = '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">Couldn\'t load odds right now. Try refreshing.</div>';
     return;
   }
+
+  // Build a reliable away+home -> real game_time lookup from our
+  // already-verified lineups data, since SharpAPI's own start-time
+  // field isn't consistently trustworthy.
+  gameTimeByMatchup = {};
+  (lineupsPayload.games || []).forEach((g) => {
+    gameTimeByMatchup[`${g.away_team}|${g.home_team}`] = g.game_time;
+  });
 
   allProps = payload.props || [];
   renderPropsRows();
@@ -1250,7 +1268,7 @@ function renderPropsRows() {
       statKey: MARKET_TO_STATKEY[p.market_type] || "strikeouts",
       opponent: opponent,
       home_team: p.home_team,
-      game_time: p.event_start_time,
+      game_time: gameTimeByMatchup[`${p.away_team}|${p.home_team}`] || p.event_start_time || null,
     });
     row.innerHTML = `
       <div class="prop-player">
@@ -1517,9 +1535,10 @@ function weatherCodeLabel(code) {
 async function loadGameInfo() {
   const homeTeam = currentPitcher.home_team;
   const gameTime = currentPitcher.game_time;
+  const validGameTime = gameTime && !isNaN(new Date(gameTime).getTime());
 
   // --- Weather ---
-  if (homeTeam && gameTime) {
+  if (homeTeam && validGameTime) {
     try {
       const res = await fetch(`/api/weather?team=${encodeURIComponent(homeTeam)}&game_time=${encodeURIComponent(gameTime)}`);
       const payload = await res.json();
