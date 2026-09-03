@@ -1196,7 +1196,7 @@ const propsTable = document.getElementById('props-table');
 
 let allProps = [];
 let mainLinesOnly = true;
-let gameTimeByMatchup = {};
+let gameTimeByPitcher = {};
 
 const MARKET_TO_STATKEY = {
   player_strikeouts: "strikeouts",
@@ -1224,12 +1224,15 @@ async function loadProps() {
     return;
   }
 
-  // Build a reliable away+home -> real game_time lookup from our
-  // already-verified lineups data, since SharpAPI's own start-time
-  // field isn't consistently trustworthy.
-  gameTimeByMatchup = {};
+  // Build a reliable pitcher-name -> real game_time lookup from our
+  // already-verified lineups data. Matching on pitcher name rather
+  // than team name, since SharpAPI's team-name formatting is known
+  // to be inconsistent (e.g. "BOS Red Sox" vs "Boston Red Sox"),
+  // while pitcher names have matched reliably everywhere else.
+  gameTimeByPitcher = {};
   (lineupsPayload.games || []).forEach((g) => {
-    gameTimeByMatchup[`${g.away_team}|${g.home_team}`] = g.game_time;
+    if (g.away_probable_pitcher) gameTimeByPitcher[g.away_probable_pitcher] = g.game_time;
+    if (g.home_probable_pitcher) gameTimeByPitcher[g.home_probable_pitcher] = g.game_time;
   });
 
   allProps = payload.props || [];
@@ -1268,7 +1271,7 @@ function renderPropsRows() {
       statKey: MARKET_TO_STATKEY[p.market_type] || "strikeouts",
       opponent: opponent,
       home_team: p.home_team,
-      game_time: gameTimeByMatchup[`${p.away_team}|${p.home_team}`] || p.event_start_time || null,
+      game_time: gameTimeByPitcher[p.player_name] || p.event_start_time || null,
     });
     row.innerHTML = `
       <div class="prop-player">
