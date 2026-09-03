@@ -20,7 +20,7 @@ export async function fetchWeatherForGame(lat, lon, gameTimeIso) {
   );
   url.searchParams.set("temperature_unit", "fahrenheit");
   url.searchParams.set("windspeed_unit", "mph");
-  url.searchParams.set("timezone", "auto");
+  url.searchParams.set("timezone", "UTC");
   url.searchParams.set("forecast_days", "10");
 
   const res = await fetch(url);
