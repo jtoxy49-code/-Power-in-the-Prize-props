@@ -1,194 +1,859 @@
-const MLB_STATS_BASE = "https://statsapi.mlb.com/api/v1";
+import { refreshOdds } from "./odds.js";
+import { refreshStats } from "./stats.js";
+import { refreshBarrelStats } from "./barrels.js";
+import { refreshSeasonStats } from "./season-stats.js";
+import { buildMergedStats, normalizeName } from "./merge.js";
+import { fetchGameLog, getCachedGameLog } from "./gamelog.js";
+import { refreshArsenalStats } from "./pitch-arsenal.js";
+import { fetchLineupsForDate, getLineupsForDate } from "./lineups.js";
+import { refreshParkFactors } from "./park-factors.js";
+import { getParkFactors } from "./park-factors-static.js";
+import { getVenueCoords } from "./venue-coords.js";
+import { fetchWeatherForGame } from "./weather.js";
+import { classifyWindForPark } from "./park-orientation.js";
+import { estimateWeatherHrImpact } from "./weather-hr-model.js";
+import { refreshBatterExpectedStats } from "./batter-expected.js";
+import { refreshBatterSeasonStats } from "./batter-season.js";
+import { buildMergedBatterStats } from "./batter-merge.js";
+import { refreshBatterPitchTypeStats, getTeamPitchTypeSplits } from "./batter-pitch-types.js";
+import { getTeamId, getTeamAbbreviation } from "./team-ids.js";
+import { getSameHandedStartersVsTeam, fetchPitchHand } from "./same-handed.js";
+import { getCachedPitchMetrics } from "./pitch-metrics.js";
+import { getCachedTeamSplits } from "./team-plate-discipline.js";
+import { getCachedMatchup } from "./batter-vs-pitcher.js";
+import { getCachedPitcherSplits } from "./pitcher-splits.js";
 
-async function fetchJson(url) {
-  const res = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" },
-  });
-  if (!res.ok) throw new Error(`Fetch failed (${res.status}): ${url}`);
-  return res.json();
-}
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
 
-async function fetchPitchHandRaw(playerId) {
-  const raw = await fetchJson(`${MLB_STATS_BASE}/people/${playerId}`);
-  return raw?.people?.[0]?.pitchHand?.code || null;
-}
-
-/**
- * A pitcher's throwing hand never changes, so this is cached in KV
- * permanently (30-day TTL) — every pitcher looked up once costs
- * zero subrequests on all future lookups, for any team.
- */
-export async function fetchPitchHand(env, playerId) {
-  const cacheKey = `pitch-hand:${playerId}`;
-  const cached = await env.PROPS_DATA.get(cacheKey);
-  if (cached) return { hand: cached === "null" ? null : cached, costedSubrequest: false };
-
-  const hand = await fetchPitchHandRaw(playerId);
-  await env.PROPS_DATA.put(cacheKey, hand || "null", { expirationTtl: 30 * 24 * 60 * 60 });
-  return { hand, costedSubrequest: true };
-}
-
-/**
- * ONE request covers the whole lookback window — confirmed via live
- * testing that MLB's schedule endpoint retains probable-pitcher info
- * on completed games, not just upcoming ones. This replaces the old
- * design (one boxscore fetch per game), which made reaching 10
- * same-handed starts run straight into Cloudflare's 50-subrequest-
- * per-invocation cap.
- */
-async function fetchGamesWithOpposingProbables(teamId, days) {
-  const endDate = new Date().toISOString().slice(0, 10);
-  const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const url = `${MLB_STATS_BASE}/schedule?sportId=1&teamId=${teamId}&startDate=${startDate}&endDate=${endDate}&gameType=R&hydrate=probablePitcher,team`;
-
-  const raw = await fetchJson(url);
-  const games = (raw?.dates || []).flatMap((d) => d.games).filter((g) => g.status?.abstractGameState === "Final");
-
-  return games.map((g) => {
-    const isTeamHome = g.teams?.home?.team?.id === Number(teamId);
-    const opposingProbable = isTeamHome ? g.teams?.away?.probablePitcher : g.teams?.home?.probablePitcher;
-    return {
-      date: g.officialDate,
-      venue_relation: isTeamHome ? "at_opponent_park" : "at_starter_home_park",
-      opposing_pitcher_id: opposingProbable?.id || null,
-      opposing_pitcher_name: opposingProbable?.fullName || null,
-    };
-  }).filter((g) => g.opposing_pitcher_id);
-}
-
-/**
- * Fetches one pitcher's season game log — reused from the same
- * pattern as gamelog.js — and returns just the games where the
- * date matches one of the target dates (when they faced our team).
- */
-async function fetchStatsForDates(playerId, year, targetDates) {
-  const url = `${MLB_STATS_BASE}/people/${playerId}/stats?stats=gameLog&group=pitching&season=${year}&sportId=1`;
-  const raw = await fetchJson(url);
-  const splits = raw?.stats?.[0]?.splits || [];
-  const targetSet = new Set(targetDates);
-
-  return splits
-    .filter((s) => targetSet.has(s.date))
-    .map((s) => {
-      const stat = s.stat || {};
-      return {
-        date: s.date,
-        innings_pitched: stat.inningsPitched ?? null,
-        strikeouts: Number(stat.strikeOuts) || 0,
-        walks: Number(stat.baseOnBalls) || 0,
-        hits_allowed: Number(stat.hits) || 0,
-        earned_runs: Number(stat.earnedRuns) || 0,
-        pitches_thrown: Number(stat.numberOfPitches) || 0,
-      };
-    });
-}
-
-const TARGET_PER_HAND = 10;
-const SUBREQUEST_BUDGET = 42; // stay well under Cloudflare's 50-per-invocation cap
-
-/**
- * Builds (and caches) a list of starters who've recently faced a
- * given team, expanding until 10 of EACH hand are found or the
- * subrequest budget runs out. Uses probable-pitcher schedule data
- * (1 request, covers the whole season) + per-UNIQUE-pitcher game
- * logs (1 request each) instead of per-game boxscore fetches —
- * far fewer requests for the same coverage, since a team's opposing
- * starters repeat across many of their games.
- */
-export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefresh = false) {
-  const cacheKey = `same-handed:${teamId}`;
-  if (!forceRefresh) {
-    const cached = await env.PROPS_DATA.get(cacheKey, "json");
-    if (cached && cached.fetched_at) {
-      const ageMs = Date.now() - new Date(cached.fetched_at).getTime();
-      if (ageMs < 6 * 60 * 60 * 1000) return cached;
+    if (url.pathname === "/api/park-factors") {
+      const team = url.searchParams.get("team");
+      if (!team) {
+        return new Response('{"error":"missing team parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const factors = getParkFactors(team);
+      return new Response(
+        JSON.stringify({
+          team,
+          factors,
+          data_type: "historical_approximate", // NOT live-computed like other sources
+        }),
+        { headers: { "content-type": "application/json; charset=utf-8" } }
+      );
     }
-  }
 
-  let subrequestCount = 0;
+    if (url.pathname === "/api/weather") {
+      const team = url.searchParams.get("team");
+      const gameTime = url.searchParams.get("game_time");
+      if (!team || !gameTime) {
+        return new Response('{"error":"missing team or game_time parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const coords = getVenueCoords(team);
+      if (!coords) {
+        return new Response(JSON.stringify({ error: `no coordinates found for team: ${team}` }), {
+          status: 404,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const weather = await fetchWeatherForGame(coords.lat, coords.lon, gameTime);
+        const wind = weather?.game_time
+          ? classifyWindForPark(team, weather.game_time.wind_direction_deg, weather.game_time.wind_mph)
+          : null;
+        const hrImpact = weather?.game_time
+          ? estimateWeatherHrImpact(weather.game_time.temperature_f, weather.game_time.wind_mph, wind?.label)
+          : null;
+        return new Response(
+          JSON.stringify({ team, game_time: gameTime, weather, wind, hr_impact_estimate: hrImpact }),
+          {
+            headers: {
+              "content-type": "application/json; charset=utf-8",
+              "cache-control": "public, max-age=1800",
+            },
+          }
+        );
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
 
-  // One request, wide window — covers essentially the whole current
-  // season in one shot.
-  const games = await fetchGamesWithOpposingProbables(teamId, 200);
-  subrequestCount += 1;
-  const year = new Date().getUTCFullYear();
+    if (url.pathname === "/api/team-batters") {
+      const team = url.searchParams.get("team");
+      if (!team) {
+        return new Response('{"error":"missing team parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const data = await env.PROPS_DATA.get("stats:batters_merged", "json");
+      const batters = data?.by_team?.[team] || [];
+      return new Response(
+        JSON.stringify({ team, batters, updated_at: data?.updated_at || null }),
+        {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=300",
+          },
+        }
+      );
+    }
 
-  // Group by unique pitcher, most recent appearance first, keeping
-  // every date they faced this team (their one gamelog fetch covers
-  // all of those dates at once).
-  const byPitcher = new Map();
-  games.forEach((g) => {
-    if (!byPitcher.has(g.opposing_pitcher_id)) {
-      byPitcher.set(g.opposing_pitcher_id, {
-        pitcher_id: g.opposing_pitcher_id,
-        pitcher_name: g.opposing_pitcher_name,
-        dates: [],
-        venue_by_date: {},
+    if (url.pathname === "/api/team-pitch-splits") {
+      const team = url.searchParams.get("team");
+      if (!team) {
+        return new Response('{"error":"missing team parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const splits = await getTeamPitchTypeSplits(env, team);
+        return new Response(JSON.stringify({ team, splits }), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=300",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/same-handed") {
+      const team = url.searchParams.get("team");
+      const hand = url.searchParams.get("hand"); // "L" or "R"
+      if (!team || !hand) {
+        return new Response('{"error":"missing team or hand parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const teamId = getTeamId(team);
+      if (!teamId) {
+        return new Response(JSON.stringify({ error: `no team ID found for: ${team}` }), {
+          status: 404,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const forceRefresh = url.searchParams.has("bust");
+        const starters = await getSameHandedStartersVsTeam(env, teamId, team, hand, forceRefresh);
+        return new Response(JSON.stringify({ team, hand, starters }), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=600",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/pitch-metrics") {
+      const playerId = url.searchParams.get("id");
+      if (!playerId) {
+        return new Response('{"error":"missing id parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const data = await getCachedPitchMetrics(env, playerId);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=600",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/team-splits") {
+      const team = url.searchParams.get("team");
+      const hand = url.searchParams.get("hand"); // optional "L" or "R"
+      const pitcherId = url.searchParams.get("pitcherId"); // optional — overrides hand if both given
+      if (!team) {
+        return new Response('{"error":"missing team parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const abbrev = getTeamAbbreviation(team);
+      if (!abbrev) {
+        return new Response(JSON.stringify({ error: `no abbreviation found for team: ${team}` }), {
+          status: 404,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const data = await getCachedTeamSplits(env, abbrev, hand, pitcherId);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=1800",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/batter-vs-pitcher") {
+      const batterId = url.searchParams.get("batterId");
+      const pitcherId = url.searchParams.get("pitcherId");
+      if (!batterId || !pitcherId) {
+        return new Response('{"error":"missing batterId or pitcherId parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const data = await getCachedMatchup(env, batterId, pitcherId);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=1800",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/pitcher-splits") {
+      const id = url.searchParams.get("id");
+      const stand = url.searchParams.get("stand"); // optional "L" or "R", omit for overall
+      if (!id) {
+        return new Response('{"error":"missing id parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const data = await getCachedPitcherSplits(env, id, stand);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=1800",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/pitcher-hand") {
+      const id = url.searchParams.get("id");
+      if (!id) {
+        return new Response('{"error":"missing id parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const { hand } = await fetchPitchHand(env, id);
+        return new Response(JSON.stringify({ id, hand }), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=86400",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    // --- Public API routes ---
+    if (url.pathname === "/api/odds") {
+      const data = await env.PROPS_DATA.get("odds:latest");
+      return new Response(data || '{"props":[],"updated_at":null}', {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "public, max-age=60",
+        },
       });
     }
-    const entry = byPitcher.get(g.opposing_pitcher_id);
-    entry.dates.push(g.date);
-    entry.venue_by_date[g.date] = g.venue_relation;
-  });
 
-  const uniquePitchers = Array.from(byPitcher.values()).sort((a, b) => {
-    const aMax = Math.max(...a.dates.map((d) => new Date(d).getTime()));
-    const bMax = Math.max(...b.dates.map((d) => new Date(d).getTime()));
-    return bMax - aMax;
-  });
+    if (url.pathname === "/api/pitcher") {
+      const nameParam = url.searchParams.get("name") || "";
+      const target = normalizeName(nameParam);
 
-  const allStarters = [];
-  let hitBudgetLimit = false;
+      const [mergedData, oddsData] = await Promise.all([
+        env.PROPS_DATA.get("stats:merged", "json"),
+        env.PROPS_DATA.get("odds:latest", "json"),
+      ]);
 
-  for (const p of uniquePitchers) {
-    const rCount = allStarters.filter((s) => s.hand === "R").length;
-    const lCount = allStarters.filter((s) => s.hand === "L").length;
-    if (rCount >= TARGET_PER_HAND && lCount >= TARGET_PER_HAND) break;
-    if (subrequestCount >= SUBREQUEST_BUDGET) { hitBudgetLimit = true; break; }
+      const statMatch = (mergedData?.pitchers || []).find(
+        (p) => p.normalized_name === target
+      );
+      const propMatches = (oddsData?.props || []).filter(
+        (p) => normalizeName(p.player_name) === target
+      );
 
-    const { hand, costedSubrequest } = await fetchPitchHand(env, p.pitcher_id);
-    if (costedSubrequest) subrequestCount += 1;
+      return new Response(
+        JSON.stringify({
+          query: nameParam,
+          matched: !!statMatch,
+          stats: statMatch || null,
+          props: propMatches,
+        }),
+        {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=60",
+          },
+        }
+      );
+    }
 
-    // Skip pitchers whose hand we already have enough of.
-    if (hand === "R" && rCount >= TARGET_PER_HAND) continue;
-    if (hand === "L" && lCount >= TARGET_PER_HAND) continue;
-    if (!hand) continue;
+    if (url.pathname === "/api/gamelog") {
+      const playerId = url.searchParams.get("id");
+      if (!playerId) {
+        return new Response('{"error":"missing id parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      const year = url.searchParams.get("year") || new Date().getUTCFullYear();
+      try {
+        const data = await getCachedGameLog(env, playerId, year);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=300",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
 
-    if (subrequestCount >= SUBREQUEST_BUDGET) { hitBudgetLimit = true; break; }
-    const statsForDates = await fetchStatsForDates(p.pitcher_id, year, p.dates).catch(() => []);
-    subrequestCount += 1;
+    if (url.pathname === "/api/lineups") {
+      const dateParam = url.searchParams.get("date"); // optional YYYY-MM-DD, defaults to today
+      try {
+        const data = await getLineupsForDate(env, dateParam);
+        return new Response(JSON.stringify(data), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=300",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
 
-    statsForDates.forEach((s) => {
-      allStarters.push({
-        pitcher_id: p.pitcher_id,
-        pitcher_name: p.pitcher_name,
-        date: s.date,
-        venue_relation: p.venue_by_date[s.date] || null,
-        innings_pitched: s.innings_pitched,
-        strikeouts: s.strikeouts,
-        walks: s.walks,
-        hits_allowed: s.hits_allowed,
-        earned_runs: s.earned_runs,
-        pitches_thrown: s.pitches_thrown,
-        hand,
+    // --- TEMPORARY DEBUG ROUTES — remove before going live ---
+    if (url.pathname === "/debug/refresh-odds") {
+      try {
+        await refreshOdds(env);
+        return new Response("Odds refresh ran successfully. Check /debug/odds to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Odds refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/odds") {
+      const data = await env.PROPS_DATA.get("odds:latest");
+      return new Response(data || "No odds data in KV yet — run /debug/refresh-odds first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
       });
-    });
-  }
+    }
 
-  allStarters.sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (url.pathname === "/debug/refresh-stats") {
+      try {
+        await refreshStats(env);
+        return new Response("Stats refresh ran successfully. Check /debug/stats to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
 
-  const result = {
-    team_name: teamName,
-    starters: allStarters,
-    subrequests_used: subrequestCount,
-    hit_budget_limit: hitBudgetLimit,
-    fetched_at: new Date().toISOString(),
-  };
-  await env.PROPS_DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 12 * 60 * 60 });
-  return result;
-}
+    if (url.pathname === "/debug/stats") {
+      const data = await env.PROPS_DATA.get("stats:expected");
+      return new Response(data || "No stats data in KV yet — run /debug/refresh-stats first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
 
-export async function getSameHandedStartersVsTeam(env, teamId, teamName, hand, forceRefresh = false) {
-  const data = await getRecentStartersVsTeam(env, teamId, teamName, forceRefresh);
-  return data.starters.filter((s) => s.hand === hand).slice(0, TARGET_PER_HAND);
-}
+    if (url.pathname === "/debug/refresh-barrels") {
+      try {
+        await refreshBarrelStats(env);
+        return new Response("Barrel stats refresh ran successfully. Check /debug/barrels to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Barrel stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/barrels") {
+      const data = await env.PROPS_DATA.get("stats:barrels");
+      return new Response(data || "No barrel data in KV yet — run /debug/refresh-barrels first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+
+    if (url.pathname === "/debug/refresh-season") {
+      try {
+        await refreshSeasonStats(env);
+        return new Response("Season stats refresh ran successfully. Check /debug/season to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Season stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/season") {
+      const data = await env.PROPS_DATA.get("stats:season");
+      return new Response(data || "No season data in KV yet — run /debug/refresh-season first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+
+    if (url.pathname === "/debug/refresh-merge") {
+      try {
+        const merged = await buildMergedStats(env);
+        return new Response(
+          `Merge ran successfully: ${merged.length} pitchers joined. Check /debug/merged to view it.`,
+          { headers: { "content-type": "text/plain; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Merge failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/merged") {
+      const data = await env.PROPS_DATA.get("stats:merged");
+      return new Response(data || "No merged data yet — run /debug/refresh-merge first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+    if (url.pathname === "/debug/gamelog") {
+      const playerId = url.searchParams.get("id") || "645261"; // defaults to Sandy Alcantara
+      const year = new Date().getUTCFullYear();
+      try {
+        const raw = await fetchGameLog(playerId, year);
+        const splits = raw?.stats?.[0]?.splits || [];
+        return new Response(
+          JSON.stringify({
+            top_level_keys: Object.keys(raw || {}),
+            games_found: splits.length,
+            sample_games: splits.slice(0, 3), // just a few, not the whole season
+          }, null, 2),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Game log fetch failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+    if (url.pathname === "/debug/refresh-arsenal") {
+      try {
+        await refreshArsenalStats(env);
+        return new Response("Arsenal stats refresh ran successfully. Check /debug/arsenal to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Arsenal stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/arsenal") {
+      const data = await env.PROPS_DATA.get("stats:arsenal");
+      return new Response(data || "No arsenal data in KV yet — run /debug/refresh-arsenal first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+    if (url.pathname === "/debug/lineups") {
+      const date = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
+      try {
+        const raw = await fetchLineupsForDate(date);
+        const games = raw?.dates?.[0]?.games || [];
+
+        const gameSummaries = games.map((g) => ({
+          matchup: `${g.teams?.away?.team?.name} @ ${g.teams?.home?.team?.name}`,
+          status: g.status?.detailedState || null,
+          has_lineups_key: !!g.lineups,
+          home_lineup_count: g.lineups?.homePlayers?.length || 0,
+          away_lineup_count: g.lineups?.awayPlayers?.length || 0,
+          away_probable_pitcher: g.teams?.away?.probablePitcher?.fullName || null,
+          home_probable_pitcher: g.teams?.home?.probablePitcher?.fullName || null,
+        }));
+
+        const gameWithLineup = games.find((g) => g.lineups?.homePlayers?.length > 0);
+
+        return new Response(
+          JSON.stringify(
+            {
+              date,
+              games_found: games.length,
+              game_summaries: gameSummaries,
+              sample_lineup_player: gameWithLineup?.lineups?.homePlayers?.[0] || null,
+            },
+            null,
+            2
+          ),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Lineups fetch failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+    if (url.pathname === "/debug/refresh-parks") {
+      try {
+        await refreshParkFactors(env);
+        return new Response("Park factors refresh ran successfully. Check /debug/parks to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Park factors refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/parks") {
+      const data = await env.PROPS_DATA.get("stats:parks_raw");
+      return new Response(data || "No park data in KV yet — run /debug/refresh-parks first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+    if (url.pathname === "/debug/batter-split") {
+      const year = new Date().getUTCFullYear();
+      const team = url.searchParams.get("team") || "WSH";
+      const hand = url.searchParams.get("hand") || "L";
+      const testUrl = `https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=batter&year=${year}&position=&team=${team}&min=1&hand=${hand}&csv=true`;
+      try {
+        const res = await fetch(testUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" },
+        });
+        const text = await res.text();
+        const looksLikeCSV = !text.trim().startsWith("<");
+        return new Response(
+          JSON.stringify(
+            {
+              test_url: testUrl,
+              status: res.status,
+              looks_like_csv: looksLikeCSV,
+              first_500_chars: text.slice(0, 500),
+            },
+            null,
+            2
+          ),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Batter split test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+    if (url.pathname === "/debug/savant-raw") {
+      const target = url.searchParams.get("u");
+      if (!target) {
+        return new Response('{"error":"pass the target URL via ?u=<url-encoded Savant URL>"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const res = await fetch(target, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" },
+        });
+        const text = await res.text();
+        const looksLikeCSV = !text.trim().startsWith("<");
+        return new Response(
+          JSON.stringify(
+            {
+              target,
+              status: res.status,
+              looks_like_csv: looksLikeCSV,
+              first_line: looksLikeCSV ? text.split("\n")[0] : null,
+              first_300_chars: text.slice(0, 300),
+            },
+            null,
+            2
+          ),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Savant raw test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+    if (url.pathname === "/debug/refresh-batter-expected") {
+      try {
+        await refreshBatterExpectedStats(env);
+        return new Response("Batter expected stats refresh ran successfully. Check /debug/batter-expected to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Batter expected stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/batter-expected") {
+      const data = await env.PROPS_DATA.get("stats:batters_expected");
+      return new Response(data || "No data yet — run /debug/refresh-batter-expected first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+
+    if (url.pathname === "/debug/refresh-batter-season") {
+      try {
+        await refreshBatterSeasonStats(env);
+        return new Response("Batter season stats refresh ran successfully. Check /debug/batter-season to view it.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Batter season stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/batter-season") {
+      const data = await env.PROPS_DATA.get("stats:batters_season");
+      return new Response(data || "No data yet — run /debug/refresh-batter-season first.", {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+
+    if (url.pathname === "/debug/refresh-batter-merge") {
+      try {
+        const byTeam = await buildMergedBatterStats(env);
+        return new Response(
+          `Batter merge ran successfully: ${Object.keys(byTeam).length} teams. Check /debug/batter-merged?team=X to view one.`,
+          { headers: { "content-type": "text/plain; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Batter merge failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/debug/batter-merged") {
+      const team = url.searchParams.get("team") || "Washington Nationals";
+      const data = await env.PROPS_DATA.get("stats:batters_merged", "json");
+      const teamBatters = data?.by_team?.[team] || null;
+      return new Response(
+        JSON.stringify({ team, batters: teamBatters, updated_at: data?.updated_at || null }, null, 2),
+        { headers: { "content-type": "application/json; charset=utf-8" } }
+      );
+    }
+    if (url.pathname === "/debug/refresh-batter-pitch-types") {
+      try {
+        await refreshBatterPitchTypeStats(env);
+        return new Response("Batter pitch-type stats refresh ran successfully.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Batter pitch-type stats refresh failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+    if (url.pathname === "/debug/team-schedule") {
+      const teamId = url.searchParams.get("teamId") || "120"; // Washington Nationals
+      const endDate = new Date().toISOString().slice(0, 10);
+      const startDate = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const testUrl = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=${teamId}&startDate=${startDate}&endDate=${endDate}&gameType=R`;
+      try {
+        const res = await fetch(testUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" } });
+        const raw = await res.json();
+        const games = (raw?.dates || []).flatMap((d) => d.games);
+        const completed = games.filter((g) => g.status?.abstractGameState === "Final");
+        return new Response(
+          JSON.stringify(
+            {
+              games_found: games.length,
+              completed_games: completed.length,
+              sample_game: completed[completed.length - 1] || games[0] || null,
+            },
+            null,
+            2
+          ),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Team schedule test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+    if (url.pathname === "/debug/boxscore") {
+      const gamePk = url.searchParams.get("gamePk") || "822688";
+      const testUrl = `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
+      try {
+        const res = await fetch(testUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" } });
+        const raw = await res.json();
+        const awayPitchers = raw?.liveData?.boxscore?.teams?.away?.pitchers || [];
+        const players = raw?.liveData?.boxscore?.teams?.away?.players || {};
+        const starterId = awayPitchers[0];
+        const starterKey = `ID${starterId}`;
+        return new Response(
+          JSON.stringify(
+            {
+              away_pitchers_in_order: awayPitchers,
+              starter_id: starterId,
+              starter_full_record: players[starterKey] || null,
+            },
+            null,
+            2
+          ),
+          { headers: { "content-type": "application/json; charset=utf-8" } }
+        );
+      } catch (err) {
+        return new Response(`Boxscore test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+    if (url.pathname === "/debug/pitch-hand") {
+      const id = url.searchParams.get("id") || "676083"; // Janson Junk from the boxscore test
+      const testUrl = `https://statsapi.mlb.com/api/v1/people/${id}`;
+      try {
+        const res = await fetch(testUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" } });
+        const raw = await res.json();
+        return new Response(JSON.stringify(raw?.people?.[0] || null, null, 2), {
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Pitch-hand test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+    if (url.pathname === "/debug/past-probable-pitcher") {
+      const teamId = url.searchParams.get("teamId") || "143"; // Phillies
+      const endDate = new Date().toISOString().slice(0, 10);
+      const startDate = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const testUrl = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=${teamId}&startDate=${startDate}&endDate=${endDate}&gameType=R&hydrate=probablePitcher,team`;
+      try {
+        const res = await fetch(testUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" } });
+        const raw = await res.json();
+        const games = (raw?.dates || []).flatMap((d) => d.games).filter((g) => g.status?.abstractGameState === "Final");
+        const sample = games.slice(-3).map((g) => ({
+          date: g.officialDate,
+          away_probable: g.teams?.away?.probablePitcher || null,
+          home_probable: g.teams?.home?.probablePitcher || null,
+        }));
+        return new Response(JSON.stringify({ finished_games_found: games.length, sample }, null, 2), {
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+    // --- END DEBUG ROUTES ---
+
+    return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(event, env, ctx) {
+    if (event.cron === "*/10 * * * *") {
+      ctx.waitUntil(refreshOdds(env));
+    } else {
+      ctx.waitUntil(
+        (async () => {
+          await Promise.all([
+            refreshStats(env),
+            refreshBarrelStats(env),
+            refreshSeasonStats(env),
+            refreshArsenalStats(env),
+            refreshBatterExpectedStats(env),
+            refreshBatterSeasonStats(env),
+            refreshBatterPitchTypeStats(env),
+          ]);
+          await buildMergedStats(env);
+          await buildMergedBatterStats(env);
+        })()
+      );
+    }
+  },
+};
