@@ -1,5 +1,4 @@
 const MLB_STATS_BASE = "https://statsapi.mlb.com/api/v1";
-const MLB_LIVE_BASE = "https://statsapi.mlb.com/api/v1.1";
 
 async function fetchJson(url) {
   const res = await fetch(url, {
@@ -9,44 +8,6 @@ async function fetchJson(url) {
   return res.json();
 }
 
-async function fetchCompletedGamesInRange(teamId, startDate, endDate) {
-  const url = `${MLB_STATS_BASE}/schedule?sportId=1&teamId=${teamId}&startDate=${startDate}&endDate=${endDate}&gameType=R`;
-  const raw = await fetchJson(url);
-  const games = (raw?.dates || []).flatMap((d) => d.games);
-  const completed = games.filter((g) => g.status?.abstractGameState === "Final");
-  completed.sort((a, b) => new Date(b.gameDate) - new Date(a.gameDate));
-  return completed;
-}
-
-async function getOpposingStarterForGame(game, teamId) {
-  const isTeamHome = game.teams?.home?.team?.id === Number(teamId);
-  const opposingSide = isTeamHome ? "away" : "home";
-
-  const feed = await fetchJson(`${MLB_LIVE_BASE}/game/${game.gamePk}/feed/live`);
-  const boxTeam = feed?.liveData?.boxscore?.teams?.[opposingSide];
-  if (!boxTeam) return null;
-
-  const starterId = boxTeam.pitchers?.[0];
-  if (!starterId) return null;
-
-  const record = boxTeam.players?.[`ID${starterId}`];
-  const pitching = record?.stats?.pitching;
-  if (!pitching) return null;
-
-  return {
-    pitcher_id: starterId,
-    pitcher_name: record.person?.fullName || "",
-    date: game.officialDate,
-    venue_relation: isTeamHome ? "at_opponent_park" : "at_starter_home_park",
-    innings_pitched: pitching.inningsPitched ?? null,
-    strikeouts: Number(pitching.strikeOuts) || 0,
-    walks: Number(pitching.baseOnBalls) || 0,
-    hits_allowed: Number(pitching.hits) || 0,
-    earned_runs: Number(pitching.earnedRuns) || 0,
-    pitches_thrown: Number(pitching.numberOfPitches) || 0,
-  };
-}
-
 async function fetchPitchHandRaw(playerId) {
   const raw = await fetchJson(`${MLB_STATS_BASE}/people/${playerId}`);
   return raw?.people?.[0]?.pitchHand?.code || null;
@@ -54,32 +15,85 @@ async function fetchPitchHandRaw(playerId) {
 
 /**
  * A pitcher's throwing hand never changes, so this is cached in KV
- * permanently (30-day TTL, effectively "forever" for our purposes) —
- * meaning every pitcher we've ever looked up before costs ZERO
- * subrequests on future lookups, which matters a lot given
- * Cloudflare's 50-subrequest-per-invocation limit.
+ * permanently (30-day TTL) — every pitcher looked up once costs
+ * zero subrequests on all future lookups, for any team.
  */
 export async function fetchPitchHand(env, playerId) {
   const cacheKey = `pitch-hand:${playerId}`;
   const cached = await env.PROPS_DATA.get(cacheKey);
-  if (cached) return cached === "null" ? null : cached;
+  if (cached) return { hand: cached === "null" ? null : cached, costedSubrequest: false };
 
   const hand = await fetchPitchHandRaw(playerId);
   await env.PROPS_DATA.put(cacheKey, hand || "null", { expirationTtl: 30 * 24 * 60 * 60 });
-  return hand;
+  return { hand, costedSubrequest: true };
+}
+
+/**
+ * ONE request covers the whole lookback window — confirmed via live
+ * testing that MLB's schedule endpoint retains probable-pitcher info
+ * on completed games, not just upcoming ones. This replaces the old
+ * design (one boxscore fetch per game), which made reaching 10
+ * same-handed starts run straight into Cloudflare's 50-subrequest-
+ * per-invocation cap.
+ */
+async function fetchGamesWithOpposingProbables(teamId, days) {
+  const endDate = new Date().toISOString().slice(0, 10);
+  const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const url = `${MLB_STATS_BASE}/schedule?sportId=1&teamId=${teamId}&startDate=${startDate}&endDate=${endDate}&gameType=R&hydrate=probablePitcher,team`;
+
+  const raw = await fetchJson(url);
+  const games = (raw?.dates || []).flatMap((d) => d.games).filter((g) => g.status?.abstractGameState === "Final");
+
+  return games.map((g) => {
+    const isTeamHome = g.teams?.home?.team?.id === Number(teamId);
+    const opposingProbable = isTeamHome ? g.teams?.away?.probablePitcher : g.teams?.home?.probablePitcher;
+    return {
+      date: g.officialDate,
+      venue_relation: isTeamHome ? "at_opponent_park" : "at_starter_home_park",
+      opposing_pitcher_id: opposingProbable?.id || null,
+      opposing_pitcher_name: opposingProbable?.fullName || null,
+    };
+  }).filter((g) => g.opposing_pitcher_id);
+}
+
+/**
+ * Fetches one pitcher's season game log — reused from the same
+ * pattern as gamelog.js — and returns just the games where the
+ * date matches one of the target dates (when they faced our team).
+ */
+async function fetchStatsForDates(playerId, year, targetDates) {
+  const url = `${MLB_STATS_BASE}/people/${playerId}/stats?stats=gameLog&group=pitching&season=${year}&sportId=1`;
+  const raw = await fetchJson(url);
+  const splits = raw?.stats?.[0]?.splits || [];
+  const targetSet = new Set(targetDates);
+
+  return splits
+    .filter((s) => targetSet.has(s.date))
+    .map((s) => {
+      const stat = s.stat || {};
+      return {
+        date: s.date,
+        innings_pitched: stat.inningsPitched ?? null,
+        strikeouts: Number(stat.strikeOuts) || 0,
+        walks: Number(stat.baseOnBalls) || 0,
+        hits_allowed: Number(stat.hits) || 0,
+        earned_runs: Number(stat.earnedRuns) || 0,
+        pitches_thrown: Number(stat.numberOfPitches) || 0,
+      };
+    });
 }
 
 const TARGET_PER_HAND = 10;
-const WINDOW_CHUNK_DAYS = 20; // smaller chunks = finer-grained budget control
-const SUBREQUEST_BUDGET = 40; // stay well under Cloudflare's 50-per-invocation cap
+const SUBREQUEST_BUDGET = 42; // stay well under Cloudflare's 50-per-invocation cap
 
 /**
  * Builds (and caches) a list of starters who've recently faced a
- * given team, expanding the search window further back in time
- * until at least 10 starts of EACH hand are found — but respecting
- * a hard subrequest budget (Cloudflare caps a single Worker
- * invocation at 50 outgoing requests), stopping gracefully with
- * whatever's been found rather than erroring out.
+ * given team, expanding until 10 of EACH hand are found or the
+ * subrequest budget runs out. Uses probable-pitcher schedule data
+ * (1 request, covers the whole season) + per-UNIQUE-pitcher game
+ * logs (1 request each) instead of per-game boxscore fetches —
+ * far fewer requests for the same coverage, since a team's opposing
+ * starters repeat across many of their games.
  */
 export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefresh = false) {
   const cacheKey = `same-handed:${teamId}`;
@@ -91,73 +105,81 @@ export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefres
     }
   }
 
-  const handCache = new Map();
-  const allStarters = [];
   let subrequestCount = 0;
-  let windowEnd = new Date();
+
+  // One request, wide window — covers essentially the whole current
+  // season in one shot.
+  const games = await fetchGamesWithOpposingProbables(teamId, 200);
+  subrequestCount += 1;
+  const year = new Date().getUTCFullYear();
+
+  // Group by unique pitcher, most recent appearance first, keeping
+  // every date they faced this team (their one gamelog fetch covers
+  // all of those dates at once).
+  const byPitcher = new Map();
+  games.forEach((g) => {
+    if (!byPitcher.has(g.opposing_pitcher_id)) {
+      byPitcher.set(g.opposing_pitcher_id, {
+        pitcher_id: g.opposing_pitcher_id,
+        pitcher_name: g.opposing_pitcher_name,
+        dates: [],
+        venue_by_date: {},
+      });
+    }
+    const entry = byPitcher.get(g.opposing_pitcher_id);
+    entry.dates.push(g.date);
+    entry.venue_by_date[g.date] = g.venue_relation;
+  });
+
+  const uniquePitchers = Array.from(byPitcher.values()).sort((a, b) => {
+    const aMax = Math.max(...a.dates.map((d) => new Date(d).getTime()));
+    const bMax = Math.max(...b.dates.map((d) => new Date(d).getTime()));
+    return bMax - aMax;
+  });
+
+  const allStarters = [];
   let hitBudgetLimit = false;
 
-  while (true) {
+  for (const p of uniquePitchers) {
     const rCount = allStarters.filter((s) => s.hand === "R").length;
     const lCount = allStarters.filter((s) => s.hand === "L").length;
     if (rCount >= TARGET_PER_HAND && lCount >= TARGET_PER_HAND) break;
     if (subrequestCount >= SUBREQUEST_BUDGET) { hitBudgetLimit = true; break; }
 
-    const windowStart = new Date(windowEnd.getTime() - WINDOW_CHUNK_DAYS * 24 * 60 * 60 * 1000);
-    const games = await fetchCompletedGamesInRange(
-      teamId,
-      windowStart.toISOString().slice(0, 10),
-      windowEnd.toISOString().slice(0, 10)
-    );
+    const { hand, costedSubrequest } = await fetchPitchHand(env, p.pitcher_id);
+    if (costedSubrequest) subrequestCount += 1;
+
+    // Skip pitchers whose hand we already have enough of.
+    if (hand === "R" && rCount >= TARGET_PER_HAND) continue;
+    if (hand === "L" && lCount >= TARGET_PER_HAND) continue;
+    if (!hand) continue;
+
+    if (subrequestCount >= SUBREQUEST_BUDGET) { hitBudgetLimit = true; break; }
+    const statsForDates = await fetchStatsForDates(p.pitcher_id, year, p.dates).catch(() => []);
     subrequestCount += 1;
-    windowEnd = new Date(windowStart.getTime() - 24 * 60 * 60 * 1000); // avoid re-counting the boundary day in the next chunk
-    if (games.length === 0) continue;
 
-    // Trim this chunk's games if processing all of them would blow
-    // the budget (1 subrequest per game for the boxscore fetch).
-    const remainingBudget = SUBREQUEST_BUDGET - subrequestCount;
-    const gamesToProcess = games.slice(0, Math.max(remainingBudget, 0));
-    if (gamesToProcess.length < games.length) hitBudgetLimit = true;
-    if (gamesToProcess.length === 0) { hitBudgetLimit = true; break; }
-
-    const starterResults = await Promise.all(
-      gamesToProcess.map((g) => getOpposingStarterForGame(g, teamId).catch(() => null))
-    );
-    subrequestCount += gamesToProcess.length;
-    const newStarters = starterResults.filter(Boolean);
-
-    const uniqueIds = [...new Set(newStarters.map((s) => s.pitcher_id))].filter((id) => !handCache.has(id));
-    const affordableIds = uniqueIds.slice(0, Math.max(SUBREQUEST_BUDGET - subrequestCount, 0));
-    if (affordableIds.length < uniqueIds.length) hitBudgetLimit = true;
-
-    const hands = await Promise.all(affordableIds.map((id) => fetchPitchHand(env, id).catch(() => null)));
-    subrequestCount += affordableIds.length;
-    affordableIds.forEach((id, i) => handCache.set(id, hands[i]));
-
-    newStarters.forEach((s) => {
-      if (handCache.has(s.pitcher_id)) {
-        allStarters.push({ ...s, hand: handCache.get(s.pitcher_id) || null });
-      }
+    statsForDates.forEach((s) => {
+      allStarters.push({
+        pitcher_id: p.pitcher_id,
+        pitcher_name: p.pitcher_name,
+        date: s.date,
+        venue_relation: p.venue_by_date[s.date] || null,
+        innings_pitched: s.innings_pitched,
+        strikeouts: s.strikeouts,
+        walks: s.walks,
+        hits_allowed: s.hits_allowed,
+        earned_runs: s.earned_runs,
+        pitches_thrown: s.pitches_thrown,
+        hand,
+      });
     });
-
-    if (hitBudgetLimit) break;
   }
 
   allStarters.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  // Defensive dedupe — belt-and-suspenders against any other overlap
-  // source (e.g. a doubleheader), keyed on pitcher + exact date.
-  const seen = new Set();
-  const deduped = allStarters.filter((s) => {
-    const key = `${s.pitcher_id}|${s.date}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
   const result = {
     team_name: teamName,
-    starters: deduped,
+    starters: allStarters,
     subrequests_used: subrequestCount,
     hit_budget_limit: hitBudgetLimit,
     fetched_at: new Date().toISOString(),
