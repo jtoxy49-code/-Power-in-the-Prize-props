@@ -1140,6 +1140,7 @@ const propsTable = document.getElementById('props-table');
 let allProps = [];
 let mainLinesOnly = true;
 let gameTimeByPitcher = {};
+let opponentByPitcher = {};
 
 const MARKET_TO_STATKEY = {
   player_strikeouts: "strikeouts",
@@ -1167,15 +1168,22 @@ async function loadProps() {
     return;
   }
 
-  // Build a reliable pitcher-name -> real game_time lookup from our
-  // already-verified lineups data. Matching on pitcher name rather
-  // than team name, since SharpAPI's team-name formatting is known
-  // to be inconsistent (e.g. "BOS Red Sox" vs "Boston Red Sox"),
-  // while pitcher names have matched reliably everywhere else.
+  // Build reliable pitcher-name -> {game_time, opponent} lookups from
+  // our own verified lineups data. Not using SharpAPI's home_pitcher/
+  // away_pitcher fields for opponent — confirmed unreliable (e.g. a
+  // name-format mismatch caused a pitcher's own team to be computed
+  // as his "opponent").
   gameTimeByPitcher = {};
+  opponentByPitcher = {};
   (lineupsPayload.games || []).forEach((g) => {
-    if (g.away_probable_pitcher) gameTimeByPitcher[g.away_probable_pitcher] = g.game_time;
-    if (g.home_probable_pitcher) gameTimeByPitcher[g.home_probable_pitcher] = g.game_time;
+    if (g.away_probable_pitcher) {
+      gameTimeByPitcher[g.away_probable_pitcher] = g.game_time;
+      opponentByPitcher[g.away_probable_pitcher] = g.home_team;
+    }
+    if (g.home_probable_pitcher) {
+      gameTimeByPitcher[g.home_probable_pitcher] = g.game_time;
+      opponentByPitcher[g.home_probable_pitcher] = g.away_team;
+    }
   });
 
   allProps = payload.props || [];
@@ -1201,7 +1209,7 @@ function renderPropsRows() {
     const bestOdds = Math.max(...p.books.map((b) => b.odds_american));
     const matchup = `${p.away_team} @ ${p.home_team}`;
     const marketText = `${p.selection === 'Over' ? 'Over' : 'Under'} ${p.line} ${marketLabel(p.market_type)}`;
-    const opponent = p.away_pitcher === p.player_name ? p.home_team : p.away_team;
+    const opponent = opponentByPitcher[p.player_name] || (p.away_pitcher === p.player_name ? p.home_team : p.away_team);
 
     const row = document.createElement('div');
     row.className = 'prop-row';
