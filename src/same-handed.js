@@ -9,10 +9,6 @@ async function fetchJson(url) {
   return res.json();
 }
 
-/**
- * Pulls a team's completed games within a specific date range,
- * most recent first.
- */
 async function fetchCompletedGamesInRange(teamId, startDate, endDate) {
   const url = `${MLB_STATS_BASE}/schedule?sportId=1&teamId=${teamId}&startDate=${startDate}&endDate=${endDate}&gameType=R`;
   const raw = await fetchJson(url);
@@ -22,11 +18,6 @@ async function fetchCompletedGamesInRange(teamId, startDate, endDate) {
   return completed;
 }
 
-/**
- * For one game, finds the starting pitcher for whichever side is
- * NOT the team we're researching, and pulls their line from that
- * specific game.
- */
 async function getOpposingStarterForGame(game, teamId) {
   const isTeamHome = game.teams?.home?.team?.id === Number(teamId);
   const opposingSide = isTeamHome ? "away" : "home";
@@ -56,25 +47,39 @@ async function getOpposingStarterForGame(game, teamId) {
   };
 }
 
-async function fetchPitchHand(playerId) {
+async function fetchPitchHandRaw(playerId) {
   const raw = await fetchJson(`${MLB_STATS_BASE}/people/${playerId}`);
   return raw?.people?.[0]?.pitchHand?.code || null;
 }
 
-export { fetchPitchHand };
+/**
+ * A pitcher's throwing hand never changes, so this is cached in KV
+ * permanently (30-day TTL, effectively "forever" for our purposes) —
+ * meaning every pitcher we've ever looked up before costs ZERO
+ * subrequests on future lookups, which matters a lot given
+ * Cloudflare's 50-subrequest-per-invocation limit.
+ */
+export async function fetchPitchHand(env, playerId) {
+  const cacheKey = `pitch-hand:${playerId}`;
+  const cached = await env.PROPS_DATA.get(cacheKey);
+  if (cached) return cached === "null" ? null : cached;
+
+  const hand = await fetchPitchHandRaw(playerId);
+  await env.PROPS_DATA.put(cacheKey, hand || "null", { expirationTtl: 30 * 24 * 60 * 60 });
+  return hand;
+}
 
 const TARGET_PER_HAND = 10;
-const WINDOW_CHUNK_DAYS = 45;
-const MAX_GAMES_SEARCHED = 130; // safety cap, ~ one full season's worth
+const WINDOW_CHUNK_DAYS = 20; // smaller chunks = finer-grained budget control
+const SUBREQUEST_BUDGET = 40; // stay well under Cloudflare's 50-per-invocation cap
 
 /**
  * Builds (and caches) a list of starters who've recently faced a
  * given team, expanding the search window further back in time
- * until at least 10 starts of EACH hand are found (or the safety
- * cap is hit) — rather than a fixed recent-games window, which can
- * under-represent whichever hand a team happened to face less of
- * lately. The full list (both hands) is cached together, since it
- * serves both "vs RHP" and "vs LHP" lookups without refetching.
+ * until at least 10 starts of EACH hand are found — but respecting
+ * a hard subrequest budget (Cloudflare caps a single Worker
+ * invocation at 50 outgoing requests), stopping gracefully with
+ * whatever's been found rather than erroring out.
  */
 export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefresh = false) {
   const cacheKey = `same-handed:${teamId}`;
@@ -88,13 +93,15 @@ export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefres
 
   const handCache = new Map();
   const allStarters = [];
-  let totalGamesSearched = 0;
+  let subrequestCount = 0;
   let windowEnd = new Date();
+  let hitBudgetLimit = false;
 
-  while (totalGamesSearched < MAX_GAMES_SEARCHED) {
+  while (true) {
     const rCount = allStarters.filter((s) => s.hand === "R").length;
     const lCount = allStarters.filter((s) => s.hand === "L").length;
     if (rCount >= TARGET_PER_HAND && lCount >= TARGET_PER_HAND) break;
+    if (subrequestCount >= SUBREQUEST_BUDGET) { hitBudgetLimit = true; break; }
 
     const windowStart = new Date(windowEnd.getTime() - WINDOW_CHUNK_DAYS * 24 * 60 * 60 * 1000);
     const games = await fetchCompletedGamesInRange(
@@ -102,21 +109,38 @@ export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefres
       windowStart.toISOString().slice(0, 10),
       windowEnd.toISOString().slice(0, 10)
     );
+    subrequestCount += 1;
     windowEnd = windowStart;
-    if (games.length === 0) continue; // e.g. an off-season gap — keep stepping back
+    if (games.length === 0) continue;
 
-    totalGamesSearched += games.length;
+    // Trim this chunk's games if processing all of them would blow
+    // the budget (1 subrequest per game for the boxscore fetch).
+    const remainingBudget = SUBREQUEST_BUDGET - subrequestCount;
+    const gamesToProcess = games.slice(0, Math.max(remainingBudget, 0));
+    if (gamesToProcess.length < games.length) hitBudgetLimit = true;
+    if (gamesToProcess.length === 0) { hitBudgetLimit = true; break; }
 
     const starterResults = await Promise.all(
-      games.map((g) => getOpposingStarterForGame(g, teamId).catch(() => null))
+      gamesToProcess.map((g) => getOpposingStarterForGame(g, teamId).catch(() => null))
     );
+    subrequestCount += gamesToProcess.length;
     const newStarters = starterResults.filter(Boolean);
 
     const uniqueIds = [...new Set(newStarters.map((s) => s.pitcher_id))].filter((id) => !handCache.has(id));
-    const hands = await Promise.all(uniqueIds.map((id) => fetchPitchHand(id).catch(() => null)));
-    uniqueIds.forEach((id, i) => handCache.set(id, hands[i]));
+    const affordableIds = uniqueIds.slice(0, Math.max(SUBREQUEST_BUDGET - subrequestCount, 0));
+    if (affordableIds.length < uniqueIds.length) hitBudgetLimit = true;
 
-    newStarters.forEach((s) => allStarters.push({ ...s, hand: handCache.get(s.pitcher_id) || null }));
+    const hands = await Promise.all(affordableIds.map((id) => fetchPitchHand(env, id).catch(() => null)));
+    subrequestCount += affordableIds.length;
+    affordableIds.forEach((id, i) => handCache.set(id, hands[i]));
+
+    newStarters.forEach((s) => {
+      if (handCache.has(s.pitcher_id)) {
+        allStarters.push({ ...s, hand: handCache.get(s.pitcher_id) || null });
+      }
+    });
+
+    if (hitBudgetLimit) break;
   }
 
   allStarters.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -124,16 +148,14 @@ export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefres
   const result = {
     team_name: teamName,
     starters: allStarters,
-    games_searched: totalGamesSearched,
+    subrequests_used: subrequestCount,
+    hit_budget_limit: hitBudgetLimit,
     fetched_at: new Date().toISOString(),
   };
   await env.PROPS_DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 12 * 60 * 60 });
   return result;
 }
 
-/**
- * Returns the most recent 10 starters matching a given hand.
- */
 export async function getSameHandedStartersVsTeam(env, teamId, teamName, hand, forceRefresh = false) {
   const data = await getRecentStartersVsTeam(env, teamId, teamName, forceRefresh);
   return data.starters.filter((s) => s.hand === hand).slice(0, TARGET_PER_HAND);
