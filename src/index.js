@@ -281,7 +281,7 @@ export default {
         });
       }
       try {
-        const hand = await fetchPitchHand(id);
+        const hand = await fetchPitchHand(env, id);
         return new Response(JSON.stringify({ id, hand }), {
           headers: {
             "content-type": "application/json; charset=utf-8",
