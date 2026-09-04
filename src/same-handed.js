@@ -68,6 +68,8 @@ async function fetchPitchHand(playerId) {
   return raw?.people?.[0]?.pitchHand?.code || null;
 }
 
+export { fetchPitchHand };
+
 /**
  * Builds (and caches) the full list of starters who've recently
  * faced a given team, regardless of hand — hand-filtering happens
