@@ -328,6 +328,27 @@ body{
 .chip:hover{ background:var(--surface-2); color:var(--text); }
 .chip.active{ background:var(--gold); border-color:var(--gold); color:#3A2900; }
 .chip.clear{ color:var(--red); border-color:transparent; background:none; }
+.chip.disabled, .btn-ghost.disabled{ opacity:0.45; cursor:not-allowed; }
+.chip.disabled:hover{ background:var(--surface); color:var(--text-dim); }
+.filter-wrap{ position:relative; display:inline-block; }
+.filter-dropdown{
+  display:none;
+  position:absolute; top:calc(100% + 6px); left:0;
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:10px; padding:8px; min-width:200px; max-height:260px;
+  overflow-y:auto; z-index:50;
+  box-shadow:0 8px 24px rgba(0,0,0,0.4);
+}
+.filter-dropdown.open{ display:block; }
+.filter-dropdown label{
+  display:flex; align-items:center; gap:8px;
+  padding:6px 8px; border-radius:6px; cursor:pointer;
+  font-size:12.5px; color:var(--text-dim);
+}
+.filter-dropdown label:hover{ background:var(--surface-3); color:var(--text); }
+.filter-dropdown input[type="checkbox"]{ accent-color:var(--gold); }
+.back-btn.disabled{ opacity:0.45; cursor:not-allowed; }
+.back-btn.disabled:hover{ background:var(--surface); color:var(--text-dim); }
 
 .props-table{ background:var(--surface); border:1px solid var(--border-soft); border-radius:12px; overflow:hidden; }
 .props-head{
@@ -766,13 +787,22 @@ body{
 
       <div class="filter-bar">
         <span class="filter-label">Filters</span>
-        <div class="chip">Teams</div>
-        <div class="chip">Games</div>
-        <div class="chip">Pitchers</div>
+        <div class="filter-wrap">
+          <div class="chip" id="teams-filter-chip">Teams</div>
+          <div class="filter-dropdown" id="teams-filter-dropdown"></div>
+        </div>
+        <div class="filter-wrap">
+          <div class="chip" id="games-filter-chip">Games</div>
+          <div class="filter-dropdown" id="games-filter-dropdown"></div>
+        </div>
+        <div class="filter-wrap">
+          <div class="chip" id="pitchers-filter-chip">Pitchers</div>
+          <div class="filter-dropdown" id="pitchers-filter-dropdown"></div>
+        </div>
         <div class="chip active" id="main-lines-toggle">Main lines only</div>
-        <div class="chip">Over/Under</div>
-        <div class="chip">Odds</div>
-        <div class="chip clear">&times; Clear all</div>
+        <div class="chip" id="over-under-toggle">Over/Under</div>
+        <div class="chip" id="odds-sort-toggle">Odds</div>
+        <div class="chip clear" id="clear-all-filters">&times; Clear all</div>
       </div>
 
       <div class="props-table" id="props-table">
@@ -813,7 +843,7 @@ body{
     <div class="page" id="page-detail">
       <div class="detail-top">
         <button class="back-btn" onclick="goPage('props')">&larr; Back to props</button>
-        <button class="back-btn">&#128279; Share</button>
+        <button class="back-btn disabled" title="Not available yet">&#128279; Share</button>
       </div>
 
       <div class="detail-hero">
@@ -826,7 +856,7 @@ body{
           </div>
         </div>
         <div class="btn-row">
-          <button class="btn btn-ghost">Alt lines</button>
+          <button class="btn btn-ghost disabled" title="Not available yet">Alt lines</button>
         </div>
       </div>
 
@@ -870,14 +900,9 @@ body{
           </div>
 
           <div class="card">
-            <div class="card-title">Recent RHP vs ATL &middot; 10 same-handed pitchers, K avg 6.4</div>
-            <table class="data-table">
+            <div class="card-title" id="same-handed-title">Recent same-handed pitchers</div>
+            <table class="data-table" id="same-handed-table">
               <tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr>
-              <tr><td class="name-cell">Derek Yancey</td><td>Aug 22</td><td>6.1</td><td>9</td></tr>
-              <tr><td class="name-cell">Ryan Castellano</td><td>Aug 17</td><td>5.2</td><td>5</td></tr>
-              <tr><td class="name-cell">Wes Halloran</td><td>Aug 15</td><td>6.0</td><td>7</td></tr>
-              <tr><td class="name-cell">Trent Ogawa</td><td>Aug 11</td><td>5.0</td><td>4</td></tr>
-              <tr><td class="name-cell">Marcus Vell</td><td>Aug 6</td><td>7.0</td><td>10</td></tr>
             </table>
           </div>
 
@@ -1141,6 +1166,11 @@ let allProps = [];
 let mainLinesOnly = true;
 let gameTimeByPitcher = {};
 let opponentByPitcher = {};
+let selectedTeams = new Set();
+let selectedGames = new Set();
+let selectedPitchers = new Set();
+let overUnderFilter = null; // null | 'Over' | 'Under'
+let oddsSortMode = 'default'; // 'default' | 'best' | 'worst'
 
 const MARKET_TO_STATKEY = {
   player_strikeouts: "strikeouts",
@@ -1196,21 +1226,43 @@ async function loadProps() {
   });
 
   allProps = payload.props || [];
+  populateFilterDropdowns();
   renderPropsRows();
 }
 
 function renderPropsRows() {
   propsTable.querySelectorAll('.prop-row, div[style]').forEach((el) => el.remove());
 
+  let props = allProps;
+
   // A prop counts as "main line" if any book flags it that way —
   // books occasionally disagree on which line is the main one.
-  const props = mainLinesOnly
-    ? allProps.filter((p) => p.books.some((b) => b.is_main_line))
-    : allProps;
+  if (mainLinesOnly) props = props.filter((p) => p.books.some((b) => b.is_main_line));
+
+  if (selectedTeams.size > 0) {
+    props = props.filter((p) => selectedTeams.has(p.away_team) || selectedTeams.has(p.home_team));
+  }
+  if (selectedGames.size > 0) {
+    props = props.filter((p) => selectedGames.has(`${p.away_team} @ ${p.home_team}`));
+  }
+  if (selectedPitchers.size > 0) {
+    props = props.filter((p) => selectedPitchers.has(p.player_name));
+  }
+  if (overUnderFilter) {
+    props = props.filter((p) => p.selection === overUnderFilter);
+  }
+
+  if (oddsSortMode !== 'default') {
+    props = [...props].sort((a, b) => {
+      const aBest = Math.max(...a.books.map((bk) => bk.odds_american));
+      const bBest = Math.max(...b.books.map((bk) => bk.odds_american));
+      return oddsSortMode === 'best' ? bBest - aBest : aBest - bBest;
+    });
+  }
 
   if (props.length === 0) {
     propsTable.insertAdjacentHTML('beforeend',
-      '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">No pitcher props posted yet for today\'s slate &mdash; check back closer to game time.</div>');
+      '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">No props match the current filters.</div>');
     return;
   }
 
@@ -1258,6 +1310,87 @@ function renderPropsRows() {
 document.getElementById('main-lines-toggle').addEventListener('click', function () {
   mainLinesOnly = !mainLinesOnly;
   this.classList.toggle('active', mainLinesOnly);
+  renderPropsRows();
+});
+
+function populateFilterDropdowns() {
+  const teams = [...new Set(allProps.flatMap((p) => [p.away_team, p.home_team]))].sort();
+  const games = [...new Set(allProps.map((p) => `${p.away_team} @ ${p.home_team}`))].sort();
+  const pitchers = [...new Set(allProps.map((p) => p.player_name))].sort();
+
+  const buildCheckboxes = (items, selectedSet, elId) => {
+    const el = document.getElementById(elId);
+    el.innerHTML = items.map((item) => `
+      <label><input type="checkbox" value="${item}" ${selectedSet.has(item) ? 'checked' : ''}> ${item}</label>
+    `).join('');
+    el.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) selectedSet.add(cb.value); else selectedSet.delete(cb.value);
+        renderPropsRows();
+      });
+    });
+  };
+
+  buildCheckboxes(teams, selectedTeams, 'teams-filter-dropdown');
+  buildCheckboxes(games, selectedGames, 'games-filter-dropdown');
+  buildCheckboxes(pitchers, selectedPitchers, 'pitchers-filter-dropdown');
+}
+
+function setupFilterDropdown(chipId, dropdownId) {
+  const chip = document.getElementById(chipId);
+  const dropdown = document.getElementById(dropdownId);
+  chip.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const wasOpen = dropdown.classList.contains('open');
+    document.querySelectorAll('.filter-dropdown.open').forEach((d) => d.classList.remove('open'));
+    if (!wasOpen) dropdown.classList.add('open');
+  });
+}
+setupFilterDropdown('teams-filter-chip', 'teams-filter-dropdown');
+setupFilterDropdown('games-filter-chip', 'games-filter-dropdown');
+setupFilterDropdown('pitchers-filter-chip', 'pitchers-filter-dropdown');
+
+document.addEventListener('click', () => {
+  document.querySelectorAll('.filter-dropdown.open').forEach((d) => d.classList.remove('open'));
+});
+document.querySelectorAll('.filter-dropdown').forEach((d) => {
+  d.addEventListener('click', (e) => e.stopPropagation());
+});
+
+document.getElementById('over-under-toggle').addEventListener('click', function () {
+  if (overUnderFilter === null) overUnderFilter = 'Over';
+  else if (overUnderFilter === 'Over') overUnderFilter = 'Under';
+  else overUnderFilter = null;
+  this.textContent = overUnderFilter ? `Over/Under: ${overUnderFilter}` : 'Over/Under';
+  this.classList.toggle('active', !!overUnderFilter);
+  renderPropsRows();
+});
+
+document.getElementById('odds-sort-toggle').addEventListener('click', function () {
+  if (oddsSortMode === 'default') oddsSortMode = 'best';
+  else if (oddsSortMode === 'best') oddsSortMode = 'worst';
+  else oddsSortMode = 'default';
+  const labels = { default: 'Odds', best: 'Odds: Best first', worst: 'Odds: Longest first' };
+  this.textContent = labels[oddsSortMode];
+  this.classList.toggle('active', oddsSortMode !== 'default');
+  renderPropsRows();
+});
+
+document.getElementById('clear-all-filters').addEventListener('click', () => {
+  selectedTeams.clear();
+  selectedGames.clear();
+  selectedPitchers.clear();
+  overUnderFilter = null;
+  oddsSortMode = 'default';
+  mainLinesOnly = true;
+  document.getElementById('main-lines-toggle').classList.add('active');
+  const ouBtn = document.getElementById('over-under-toggle');
+  ouBtn.textContent = 'Over/Under';
+  ouBtn.classList.remove('active');
+  const oddsBtn = document.getElementById('odds-sort-toggle');
+  oddsBtn.textContent = 'Odds';
+  oddsBtn.classList.remove('active');
+  populateFilterDropdowns();
   renderPropsRows();
 });
 
@@ -1508,6 +1641,12 @@ async function loadOppositionLineup() {
   const vsPitcherBtn = document.getElementById('lineup-vs-pitcher-btn');
   if (currentPitcher.name) vsPitcherBtn.textContent = `vs ${currentPitcher.name}`;
 
+  document.getElementById('opp-batter-table').innerHTML =
+    '<tr><td style="color:var(--text-faint);padding:16px 8px;">Loading lineup data\u2026</td></tr>';
+  document.getElementById('batting-production-summary').innerHTML = '';
+  document.getElementById('team-plate-discipline-summary').innerHTML = '';
+  document.getElementById('team-batted-ball-summary').innerHTML = '';
+
   try {
     const [battersRes, splitsRes, pitchRes] = await Promise.all([
       fetch(`/api/team-batters?team=${encodeURIComponent(opponent)}`),
@@ -1518,6 +1657,8 @@ async function loadOppositionLineup() {
     teamSplitsData = await splitsRes.json();
     teamPitchSplitsData = await pitchRes.json();
   } catch (err) {
+    document.getElementById('opp-batter-table').innerHTML =
+      '<tr><td style="color:var(--text-faint);padding:16px 8px;">Couldn\'t load lineup data. Try again.</td></tr>';
     return;
   }
 
@@ -1772,6 +1913,15 @@ async function loadGameInfo() {
   const gameTime = currentPitcher.game_time;
   const validGameTime = gameTime && !isNaN(new Date(gameTime).getTime());
 
+  document.getElementById('wind-val').textContent = 'Loading\u2026';
+  document.getElementById('wind-dir').textContent = '';
+  document.getElementById('forecast-val').textContent = '\u2014';
+  document.getElementById('forecast-cond').textContent = '';
+  document.getElementById('humidity-val').textContent = '\u2014';
+  document.getElementById('park-factors-row').innerHTML =
+    '<div style="grid-column:1/-1;color:var(--text-faint);font-size:12px;padding:8px 0;">Loading\u2026</div>';
+  document.getElementById('park-venue-label').textContent = '';
+
   // --- Weather ---
   if (homeTeam && validGameTime) {
     try {
@@ -1798,6 +1948,8 @@ async function loadGameInfo() {
     } catch (err) {
       document.getElementById('wind-val').textContent = '\u2014';
     }
+  } else {
+    document.getElementById('wind-val').textContent = '\u2014';
   }
 
   // --- Park factors ---
@@ -1817,10 +1969,61 @@ async function loadGameInfo() {
         document.getElementById('park-factors-row').innerHTML =
           chip('HR', f.hr) + chip('2B/3B', f.doubles_triples) + chip('1B', f.singles) + chip('RUNS', f.runs);
         document.getElementById('park-venue-label').textContent = `${f.venue} (approx.)`;
+      } else {
+        document.getElementById('park-factors-row').innerHTML =
+          '<div style="grid-column:1/-1;color:var(--text-faint);font-size:12px;padding:8px 0;">Not available.</div>';
       }
     } catch (err) {
-      // leave placeholders
+      document.getElementById('park-factors-row').innerHTML =
+        '<div style="grid-column:1/-1;color:var(--text-faint);font-size:12px;padding:8px 0;">Couldn\'t load park factors.</div>';
     }
+  } else {
+    document.getElementById('park-factors-row').innerHTML =
+      '<div style="grid-column:1/-1;color:var(--text-faint);font-size:12px;padding:8px 0;">Not available.</div>';
+  }
+}
+
+async function loadSameHandedPitchers() {
+  const table = document.getElementById('same-handed-table');
+  const title = document.getElementById('same-handed-title');
+  if (!currentPitcher.player_id || !currentPitcher.opponent) return;
+
+  title.textContent = 'Loading\u2026';
+  table.innerHTML = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr><tr><td colspan="4" style="color:var(--text-faint);padding:12px 8px;">Loading\u2026</td></tr>';
+
+  try {
+    const handRes = await fetch(`/api/pitcher-hand?id=${currentPitcher.player_id}`);
+    const handPayload = await handRes.json();
+    const hand = handPayload.hand;
+    if (!hand) {
+      title.textContent = 'Recent same-handed pitchers';
+      table.innerHTML = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr><tr><td colspan="4" style="color:var(--text-faint);padding:12px 8px;">Handedness unavailable.</td></tr>';
+      return;
+    }
+
+    const res = await fetch(`/api/same-handed?team=${encodeURIComponent(currentPitcher.opponent)}&hand=${hand}`);
+    const payload = await res.json();
+    const starters = payload.starters || [];
+
+    const handLabel = hand === 'R' ? 'RHP' : 'LHP';
+    const oppAbbr = currentPitcher.opponent;
+    const avgK = starters.length > 0 ? (starters.reduce((s, p) => s + p.strikeouts, 0) / starters.length).toFixed(1) : '\u2014';
+    title.textContent = `Recent ${handLabel} vs ${oppAbbr} \u00b7 ${starters.length} same-handed pitchers, K avg ${avgK}`;
+
+    if (starters.length === 0) {
+      table.innerHTML = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr><tr><td colspan="4" style="color:var(--text-faint);padding:12px 8px;">No recent same-handed starts found.</td></tr>';
+      return;
+    }
+
+    let rows = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr>';
+    starters.forEach((p) => {
+      const dateLabel = p.date ? new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+      rows += `<tr><td class="name-cell">${p.pitcher_name}</td><td>${dateLabel}</td><td>${p.innings_pitched ?? '\u2014'}</td><td>${p.strikeouts}</td></tr>`;
+    });
+    table.innerHTML = rows;
+  } catch (err) {
+    title.textContent = 'Recent same-handed pitchers';
+    table.innerHTML = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr><tr><td colspan="4" style="color:var(--text-faint);padding:12px 8px;">Couldn\'t load.</td></tr>';
   }
 }
 
@@ -1858,6 +2061,7 @@ async function loadPitcherDetail() {
   loadPitcherSplits('');
   loadGameInfo();
   loadOppositionLineup();
+  loadSameHandedPitchers();
 }
 
 /* ---------------- Real hit-rate chart (gamelog + pitch-metrics) ---------------- */
