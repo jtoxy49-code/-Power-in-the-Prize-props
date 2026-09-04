@@ -882,53 +882,31 @@ body{
           </div>
 
           <div class="card">
-            <div class="card-title" style="margin-bottom:6px;">Confirmed opposing lineup</div>
+            <div class="card-title" style="margin-bottom:6px;" id="opp-lineup-title">Confirmed opposing lineup</div>
             <div class="split-toolbar">
-              <button class="tool-btn">Expand all</button>
-              <button class="tool-btn">Deep dive mode</button>
+              <button class="tool-btn" id="lineup-expand-all">Expand all</button>
               <select class="select-pill"><option>2026 Season</option></select>
               <div class="spacer"></div>
-              <div class="pill-group">
-                <button class="tool-btn active">Recent</button>
-                <button class="tool-btn">L5</button>
-                <button class="tool-btn">L10</button>
-                <button class="tool-btn">L20</button>
-              </div>
-              <div class="pill-group">
-                <button class="tool-btn active">Overall</button>
-                <button class="tool-btn">vs RHP</button>
-                <button class="tool-btn">vs M. Reyes</button>
+              <div class="pill-group" id="lineup-hand-tab-row">
+                <button class="tool-btn active" data-hand="">Overall</button>
+                <button class="tool-btn" data-hand="R">vs RHP</button>
+                <button class="tool-btn" data-hand="L">vs LHP</button>
+                <button class="tool-btn" data-hand="pitcher" id="lineup-vs-pitcher-btn">vs pitcher</button>
               </div>
             </div>
 
-            <div style="font-size:13px; font-weight:700; margin-bottom:2px;">Atlanta Braves &middot; team splits data <span style="color:var(--text-faint); font-weight:500;">Overall</span></div>
+            <div style="font-size:13px; font-weight:700; margin-bottom:2px;"><span id="opp-team-name">&mdash;</span> &middot; team splits data <span style="color:var(--text-faint); font-weight:500;" id="opp-splits-tag">Overall</span></div>
 
             <div class="subsection">
               <div class="subsection-head" onclick="toggleSub(this)">
                 <span class="chev">&#9660;</span>
                 <span class="st-title">BATTING PRODUCTION</span>
-                <span class="st-tag">Overall</span>
               </div>
               <div class="subsection-body">
-                <div class="summary-strip">
-                  <div class="summary-item"><div class="lbl">PA</div><div class="val">5122</div></div>
-                  <div class="summary-item"><div class="lbl">BB%</div><div class="val">8.6%</div></div>
-                  <div class="summary-item"><div class="lbl">K%</div><div class="val">22.4%</div></div>
-                  <div class="summary-item"><div class="lbl">AVG</div><div class="val">.259</div></div>
-                  <div class="summary-item"><div class="lbl">OBP</div><div class="val pos">.328</div></div>
-                  <div class="summary-item"><div class="lbl">SLG</div><div class="val">.418</div></div>
-                  <div class="summary-item"><div class="lbl">ISO</div><div class="val">.159</div></div>
-                  <div class="summary-item"><div class="lbl">wOBA</div><div class="val">.324</div></div>
-                  <div class="summary-item"><div class="lbl">WRC+</div><div class="val pos">109.2</div></div>
-                </div>
+                <div class="summary-strip" id="batting-production-summary"></div>
                 <div class="scroll-x">
-                  <table class="data-table" style="min-width:560px;">
-                    <tr><th>PITCH</th><th>PA</th><th>BA</th><th>xBA</th><th>xwOBA</th><th>HARD%</th><th>K%</th><th>BB%</th><th>SWSTR%</th></tr>
-                    <tr><td class="name-cell">FF</td><td>1488</td><td class="pos">.262</td><td>.251</td><td class="pos">.339</td><td class="pos">44.8%</td><td class="neg">23.1%</td><td>10.9%</td><td>10.9%</td></tr>
-                    <tr><td class="name-cell">SL</td><td>1041</td><td class="neg">.209</td><td>.216</td><td>.271</td><td>34.9%</td><td class="neg">29.6%</td><td>7.0%</td><td>15.7%</td></tr>
-                    <tr><td class="name-cell">CH</td><td>560</td><td class="pos">.221</td><td>.229</td><td>.279</td><td>29.8%</td><td>22.9%</td><td>6.1%</td><td>14.9%</td></tr>
-                    <tr><td class="name-cell">SI</td><td>867</td><td class="pos">.301</td><td class="pos">.278</td><td class="pos">.348</td><td class="pos">43.2%</td><td class="pos">13.8%</td><td class="pos">10.5%</td><td class="pos">6.4%</td></tr>
-                    <tr><td class="name-cell">CU</td><td>318</td><td>.259</td><td>.230</td><td>.292</td><td>37.6%</td><td class="neg">30.9%</td><td>6.2%</td><td>13.8%</td></tr>
+                  <table class="data-table" style="min-width:560px;" id="batting-production-table">
+                    <tr><th>PITCH</th><th>PA</th><th>BA</th><th>xBA</th><th>xwOBA</th><th>HARD%</th><th>K%</th><th>BB%</th><th>WHIFF%</th></tr>
                   </table>
                 </div>
               </div>
@@ -938,24 +916,12 @@ body{
               <div class="subsection-head" onclick="toggleSub(this)">
                 <span class="chev">&#9660;</span>
                 <span class="st-title">PLATE DISCIPLINE</span>
-                <span class="st-tag">vs RHP</span>
               </div>
               <div class="subsection-body">
-                <div class="summary-strip">
-                  <div class="summary-item"><div class="lbl">O-SW%</div><div class="val">31.4%</div></div>
-                  <div class="summary-item"><div class="lbl">Z-SW%</div><div class="val">65.8%</div></div>
-                  <div class="summary-item"><div class="lbl">SWING%</div><div class="val">48.1%</div></div>
-                  <div class="summary-item"><div class="lbl">O-CT%</div><div class="val">56.9%</div></div>
-                  <div class="summary-item"><div class="lbl">Z-CT%</div><div class="val">84.0%</div></div>
-                  <div class="summary-item"><div class="lbl">ZONE%</div><div class="val">48.9%</div></div>
-                  <div class="summary-item"><div class="lbl">SWSTR%</div><div class="val">11.8%</div></div>
-                </div>
+                <div class="summary-strip" id="team-plate-discipline-summary"></div>
                 <div class="scroll-x">
-                  <table class="data-table" style="min-width:560px;">
+                  <table class="data-table" style="min-width:560px;" id="team-plate-discipline-table">
                     <tr><th>PITCH</th><th>O-SWING%</th><th>Z-SWING%</th><th>SWING%</th><th>O-CONTACT%</th><th>Z-CONTACT%</th><th>ZONE%</th><th>SWSTR%</th></tr>
-                    <tr><td class="name-cell">FF</td><td class="neg">34.2%</td><td>68.1%</td><td>51.6%</td><td>68.9%</td><td>84.7%</td><td>53.1%</td><td>10.1%</td></tr>
-                    <tr><td class="name-cell">SL</td><td class="neg">33.8%</td><td>67.4%</td><td>50.3%</td><td class="neg">42.9%</td><td>78.0%</td><td>47.6%</td><td class="neg">17.4%</td></tr>
-                    <tr><td class="name-cell">CH</td><td>29.6%</td><td>74.9%</td><td>46.5%</td><td>47.2%</td><td class="neg">76.3%</td><td>35.9%</td><td>15.1%</td></tr>
                   </table>
                 </div>
               </div>
@@ -965,57 +931,34 @@ body{
               <div class="subsection-head" onclick="toggleSub(this)">
                 <span class="chev">&#9660;</span>
                 <span class="st-title">BATTED BALL</span>
-                <span class="st-tag">vs RHP</span>
               </div>
               <div class="subsection-body">
-                <div class="summary-strip">
-                  <div class="summary-item"><div class="lbl">LD%</div><div class="val">22.1%</div></div>
-                  <div class="summary-item"><div class="lbl">GB%</div><div class="val">42.6%</div></div>
-                  <div class="summary-item"><div class="lbl">FB%</div><div class="val">35.3%</div></div>
-                  <div class="summary-item"><div class="lbl">IFFB%</div><div class="val neg">17.5%</div></div>
-                  <div class="summary-item"><div class="lbl">HR/FB</div><div class="val">11.8%</div></div>
-                </div>
+                <div class="summary-strip" id="team-batted-ball-summary"></div>
                 <div class="scroll-x">
-                  <table class="data-table" style="min-width:480px;">
+                  <table class="data-table" style="min-width:480px;" id="team-batted-ball-table">
                     <tr><th>PITCH</th><th>LD%</th><th>GB%</th><th>FB%</th><th>IFFB%</th><th>HR/FB</th></tr>
-                    <tr><td class="name-cell">FF</td><td>23.0%</td><td class="pos">32.9%</td><td class="neg">44.1%</td><td class="neg">18.0%</td><td>10.6%</td></tr>
-                    <tr><td class="name-cell">SL</td><td>19.6%</td><td>39.8%</td><td class="neg">40.6%</td><td class="neg">19.1%</td><td class="neg">17.9%</td></tr>
-                    <tr><td class="name-cell">SI</td><td>20.5%</td><td class="neg">56.8%</td><td class="pos">22.7%</td><td>18.9%</td><td>9.1%</td></tr>
                   </table>
                 </div>
               </div>
             </div>
 
             <div class="subsection" style="margin-top:20px;">
-              <table class="data-table batter-table">
+              <table class="data-table batter-table" id="opp-batter-table">
                 <tr><th>#</th><th>BATTER</th><th>PA</th><th>BA</th><th>K%</th><th>WHIFF%</th><th>CHASE%</th><th>BB%</th></tr>
-                <tr><td class="batter-chev">&rsaquo;</td><td><div class="batter-row-name"><div class="b-avatar">RA</div><span class="name-cell" style="font-weight:600;">R. Alden</span><span class="handed-tag">RHB</span></div></td><td>512</td><td class="pos">.298</td><td class="pos">15.2%</td><td class="pos">19.4%</td><td>28.1%</td><td>9.4%</td></tr>
-                <tr><td class="batter-chev">&rsaquo;</td><td><div class="batter-row-name"><div class="b-avatar">TM</div><span class="name-cell" style="font-weight:600;">T. Marchetti</span><span class="handed-tag">LHB</span></div></td><td>478</td><td>.251</td><td class="neg">28.9%</td><td class="neg">33.0%</td><td class="neg">34.7%</td><td>7.1%</td></tr>
-                <tr><td class="batter-chev">&rsaquo;</td><td><div class="batter-row-name"><div class="b-avatar">DO</div><span class="name-cell" style="font-weight:600;">D. Osei</span><span class="handed-tag">RHB</span></div></td><td>560</td><td class="pos">.276</td><td>21.0%</td><td>24.5%</td><td>26.2%</td><td>10.2%</td></tr>
-                <tr><td class="batter-chev">&rsaquo;</td><td><div class="batter-row-name"><div class="b-avatar">CW</div><span class="name-cell" style="font-weight:600;">C. Whitfield</span><span class="handed-tag">LHB</span></div></td><td>339</td><td>.239</td><td class="neg">30.4%</td><td class="neg">31.8%</td><td>29.9%</td><td>6.8%</td></tr>
-                <tr><td class="batter-chev">&rsaquo;</td><td><div class="batter-row-name"><div class="b-avatar">JB</div><span class="name-cell" style="font-weight:600;">J. Boone Jr.</span><span class="handed-tag">RHB</span></div></td><td>301</td><td>.221</td><td>24.1%</td><td>27.0%</td><td class="neg">32.5%</td><td>8.9%</td></tr>
-                <tr><td class="batter-chev">&rsaquo;</td><td><div class="batter-row-name"><div class="b-avatar">NK</div><span class="name-cell" style="font-weight:600;">N. Kessler</span><span class="handed-tag">RHB</span></div></td><td>288</td><td class="neg">.218</td><td class="neg">31.6%</td><td class="neg">30.2%</td><td class="neg">33.9%</td><td>5.9%</td></tr>
               </table>
 
               <div class="deepdive-panel">
                 <div class="deepdive-toggle" onclick="toggleDeepDive(this)">
                   <span class="chev">&#9660;</span>
-                  Atlanta Braves vs M. Reyes arsenal &mdash; deep dive
-                  <span class="st-tag">vs RHP</span>
+                  <span id="deepdive-title">Team vs pitcher arsenal &mdash; deep dive</span>
                 </div>
                 <div class="deepdive-body">
-                  <div class="sub-tab-row">
-                    <div class="sub-tab active" onclick="setSubTab(this)">Plate discipline</div>
-                    <div class="sub-tab" onclick="setSubTab(this)">Batted ball</div>
+                  <div class="sub-tab-row" id="deepdive-subtabs">
+                    <div class="sub-tab active" data-view="plate_discipline" onclick="setDeepDiveTab(this)">Plate discipline</div>
+                    <div class="sub-tab" data-view="batted_ball" onclick="setDeepDiveTab(this)">Batted ball</div>
                   </div>
                   <div class="scroll-x">
-                    <table class="data-table" style="min-width:560px;">
-                      <tr><th>PITCH</th><th>O-SWING%</th><th>Z-SWING%</th><th>SWING%</th><th>O-CONTACT%</th><th>Z-CONTACT%</th><th>ZONE%</th><th>SWSTR%</th></tr>
-                      <tr><td class="name-cell">FF</td><td class="neg">35.4%</td><td>67.2%</td><td>52.1%</td><td>69.7%</td><td>85.5%</td><td>52.7%</td><td>10.2%</td></tr>
-                      <tr><td class="name-cell">SL</td><td>34.7%</td><td>68.9%</td><td>51.1%</td><td class="neg">44.7%</td><td>78.9%</td><td>48.0%</td><td class="neg">17.0%</td></tr>
-                      <tr><td class="name-cell">CH</td><td>31.9%</td><td>75.8%</td><td>47.3%</td><td>46.8%</td><td class="neg">77.0%</td><td>35.1%</td><td>17.1%</td></tr>
-                      <tr><td class="name-cell">CU</td><td>31.2%</td><td>61.1%</td><td>43.8%</td><td>39.3%</td><td>81.1%</td><td>42.2%</td><td class="neg">15.8%</td></tr>
-                    </table>
+                    <table class="data-table" style="min-width:560px;" id="deepdive-table"></table>
                   </div>
                 </div>
               </div>
@@ -1523,6 +1466,278 @@ document.getElementById('pitcher-hand-tab-row').addEventListener('click', (e) =>
   loadPitcherSplits(pill.dataset.hand);
 });
 
+let teamBattersData = null;
+let teamSplitsData = null;
+let teamPitchSplitsData = null;
+let deepDiveData = null;
+let deepDiveView = 'plate_discipline';
+
+function weightedAvg(items, valueKey, weightKey) {
+  let totalWeight = 0, totalValue = 0;
+  items.forEach((it) => {
+    const v = valueKey(it);
+    const w = weightKey(it);
+    if (v != null && w) { totalValue += v * w; totalWeight += w; }
+  });
+  return totalWeight > 0 ? totalValue / totalWeight : null;
+}
+
+async function loadOppositionLineup() {
+  const opponent = currentPitcher.opponent;
+  if (!opponent) return;
+
+  document.getElementById('opp-team-name').textContent = opponent;
+  document.getElementById('opp-lineup-title').textContent = `Confirmed opposing lineup \u00b7 ${opponent}`;
+  const vsPitcherBtn = document.getElementById('lineup-vs-pitcher-btn');
+  if (currentPitcher.name) vsPitcherBtn.textContent = `vs ${currentPitcher.name}`;
+
+  try {
+    const [battersRes, splitsRes, pitchRes] = await Promise.all([
+      fetch(`/api/team-batters?team=${encodeURIComponent(opponent)}`),
+      fetch(`/api/team-splits?team=${encodeURIComponent(opponent)}`),
+      fetch(`/api/team-pitch-splits?team=${encodeURIComponent(opponent)}`),
+    ]);
+    teamBattersData = await battersRes.json();
+    teamSplitsData = await splitsRes.json();
+    teamPitchSplitsData = await pitchRes.json();
+  } catch (err) {
+    return;
+  }
+
+  renderBattingProduction();
+  renderTeamPlateDiscipline();
+  renderTeamBattedBall();
+  renderBatterTable();
+  loadDeepDive('');
+}
+
+function renderBattingProduction() {
+  const batters = (teamBattersData?.batters || []).filter((b) => b.season && b.season.pa > 0);
+  const summary = document.getElementById('batting-production-summary');
+  const totalPA = batters.reduce((s, b) => s + (b.season.pa || 0), 0);
+  const avg = weightedAvg(batters, (b) => b.season.avg, (b) => b.season.pa);
+  const obp = weightedAvg(batters, (b) => b.season.obp, (b) => b.season.pa);
+  const slg = weightedAvg(batters, (b) => b.season.slg, (b) => b.season.pa);
+  const kPct = weightedAvg(batters, (b) => b.season.k_pct, (b) => b.season.pa);
+  const bbPct = weightedAvg(batters, (b) => b.season.bb_pct, (b) => b.season.pa);
+  const woba = weightedAvg(batters, (b) => (b.expected?.woba), (b) => b.season.pa);
+  const fmt3 = (v) => (v != null ? v.toFixed(3).replace(/^0/, '') : '\u2014');
+  const fmt1 = (v) => (v != null ? v.toFixed(1) + '%' : '\u2014');
+
+  summary.innerHTML = `
+    <div class="summary-item"><div class="lbl">PA</div><div class="val">${totalPA}</div></div>
+    <div class="summary-item"><div class="lbl">BB%</div><div class="val">${fmt1(bbPct)}</div></div>
+    <div class="summary-item"><div class="lbl">K%</div><div class="val">${fmt1(kPct)}</div></div>
+    <div class="summary-item"><div class="lbl">AVG</div><div class="val">${fmt3(avg)}</div></div>
+    <div class="summary-item"><div class="lbl">OBP</div><div class="val">${fmt3(obp)}</div></div>
+    <div class="summary-item"><div class="lbl">SLG</div><div class="val">${fmt3(slg)}</div></div>
+    <div class="summary-item"><div class="lbl">ISO</div><div class="val">${avg != null && slg != null ? fmt3(slg - avg) : '\u2014'}</div></div>
+    <div class="summary-item"><div class="lbl">wOBA</div><div class="val">${fmt3(woba)}</div></div>
+    <div class="summary-item"><div class="lbl">WRC+</div><div class="val">N/A</div></div>
+  `;
+
+  const splits = teamPitchSplitsData?.splits || [];
+  let rows = '<tr><th>PITCH</th><th>PA</th><th>BA</th><th>xBA</th><th>xwOBA</th><th>HARD%</th><th>K%</th><th>BB%</th><th>WHIFF%</th></tr>';
+  if (splits.length === 0) {
+    rows += '<tr><td colspan="9" style="color:var(--text-faint);padding:12px 8px;">No data available.</td></tr>';
+  } else {
+    splits.forEach((s) => {
+      rows += `<tr>
+        <td class="name-cell">${s.pitch_name || s.pitch_type}</td>
+        <td>${s.pa}</td>
+        <td>${s.ba != null ? s.ba.toFixed(3) : '\u2014'}</td>
+        <td>${s.est_ba != null ? s.est_ba.toFixed(3) : '\u2014'}</td>
+        <td>${s.est_woba != null ? s.est_woba.toFixed(3) : '\u2014'}</td>
+        <td>${s.hard_hit_pct != null ? s.hard_hit_pct.toFixed(1) + '%' : '\u2014'}</td>
+        <td>${s.k_pct != null ? s.k_pct.toFixed(1) + '%' : '\u2014'}</td>
+        <td>${s.bb_pct != null ? s.bb_pct.toFixed(1) + '%' : 'N/A'}</td>
+        <td>${s.whiff_pct != null ? s.whiff_pct.toFixed(1) + '%' : '\u2014'}</td>
+      </tr>`;
+    });
+  }
+  document.getElementById('batting-production-table').innerHTML = rows;
+}
+
+function renderPitchTypeSection(pitchTypes, summaryElId, tableElId, mode) {
+  const summary = document.getElementById(summaryElId);
+  const table = document.getElementById(tableElId);
+
+  if (!pitchTypes || pitchTypes.length === 0) {
+    summary.innerHTML = '';
+    table.innerHTML = mode === 'pd'
+      ? '<tr><th>PITCH</th><th>O-SWING%</th><th>Z-SWING%</th><th>SWING%</th><th>O-CONTACT%</th><th>Z-CONTACT%</th><th>ZONE%</th><th>SWSTR%</th></tr><tr><td colspan="8" style="color:var(--text-faint);padding:12px 8px;">No data available.</td></tr>'
+      : '<tr><th>PITCH</th><th>LD%</th><th>GB%</th><th>FB%</th><th>IFFB%</th><th>HR/FB</th></tr><tr><td colspan="6" style="color:var(--text-faint);padding:12px 8px;">No data available.</td></tr>';
+    return;
+  }
+
+  const fmt = (v) => (v != null ? v.toFixed(1) + '%' : '\u2014');
+
+  if (mode === 'pd') {
+    const oSw = weightedAvg(pitchTypes, (p) => p.plate_discipline.o_swing_pct, (p) => p.pitches);
+    const zSw = weightedAvg(pitchTypes, (p) => p.plate_discipline.z_swing_pct, (p) => p.pitches);
+    const sw = weightedAvg(pitchTypes, (p) => p.plate_discipline.swing_pct, (p) => p.pitches);
+    const oCt = weightedAvg(pitchTypes, (p) => p.plate_discipline.o_contact_pct, (p) => p.pitches);
+    const zCt = weightedAvg(pitchTypes, (p) => p.plate_discipline.z_contact_pct, (p) => p.pitches);
+    const zone = weightedAvg(pitchTypes, (p) => p.plate_discipline.zone_pct, (p) => p.pitches);
+    const swstr = weightedAvg(pitchTypes, (p) => p.plate_discipline.swstr_pct, (p) => p.pitches);
+    summary.innerHTML = `
+      <div class="summary-item"><div class="lbl">O-SW%</div><div class="val">${fmt(oSw)}</div></div>
+      <div class="summary-item"><div class="lbl">Z-SW%</div><div class="val">${fmt(zSw)}</div></div>
+      <div class="summary-item"><div class="lbl">SWING%</div><div class="val">${fmt(sw)}</div></div>
+      <div class="summary-item"><div class="lbl">O-CT%</div><div class="val">${fmt(oCt)}</div></div>
+      <div class="summary-item"><div class="lbl">Z-CT%</div><div class="val">${fmt(zCt)}</div></div>
+      <div class="summary-item"><div class="lbl">ZONE%</div><div class="val">${fmt(zone)}</div></div>
+      <div class="summary-item"><div class="lbl">SWSTR%</div><div class="val">${fmt(swstr)}</div></div>
+    `;
+    let rows = '<tr><th>PITCH</th><th>O-SWING%</th><th>Z-SWING%</th><th>SWING%</th><th>O-CONTACT%</th><th>Z-CONTACT%</th><th>ZONE%</th><th>SWSTR%</th></tr>';
+    pitchTypes.forEach((p) => {
+      const pd = p.plate_discipline;
+      rows += `<tr><td class="name-cell">${p.pitch_name || p.pitch_type}</td><td>${fmt(pd.o_swing_pct)}</td><td>${fmt(pd.z_swing_pct)}</td><td>${fmt(pd.swing_pct)}</td><td>${fmt(pd.o_contact_pct)}</td><td>${fmt(pd.z_contact_pct)}</td><td>${fmt(pd.zone_pct)}</td><td>${fmt(pd.swstr_pct)}</td></tr>`;
+    });
+    table.innerHTML = rows;
+  } else {
+    const ld = weightedAvg(pitchTypes, (p) => p.batted_ball.ld_pct, (p) => p.batted_ball.balls_in_play);
+    const gb = weightedAvg(pitchTypes, (p) => p.batted_ball.gb_pct, (p) => p.batted_ball.balls_in_play);
+    const fb = weightedAvg(pitchTypes, (p) => p.batted_ball.fb_pct, (p) => p.batted_ball.balls_in_play);
+    const iffb = weightedAvg(pitchTypes, (p) => p.batted_ball.iffb_pct, (p) => p.batted_ball.balls_in_play);
+    const hrfb = weightedAvg(pitchTypes, (p) => p.batted_ball.hr_per_fb_pct, (p) => p.batted_ball.balls_in_play);
+    summary.innerHTML = `
+      <div class="summary-item"><div class="lbl">LD%</div><div class="val">${fmt(ld)}</div></div>
+      <div class="summary-item"><div class="lbl">GB%</div><div class="val">${fmt(gb)}</div></div>
+      <div class="summary-item"><div class="lbl">FB%</div><div class="val">${fmt(fb)}</div></div>
+      <div class="summary-item"><div class="lbl">IFFB%</div><div class="val">${fmt(iffb)}</div></div>
+      <div class="summary-item"><div class="lbl">HR/FB</div><div class="val">${fmt(hrfb)}</div></div>
+    `;
+    let rows = '<tr><th>PITCH</th><th>LD%</th><th>GB%</th><th>FB%</th><th>IFFB%</th><th>HR/FB</th></tr>';
+    pitchTypes.forEach((p) => {
+      const bb = p.batted_ball;
+      rows += `<tr><td class="name-cell">${p.pitch_name || p.pitch_type}</td><td>${fmt(bb.ld_pct)}</td><td>${fmt(bb.gb_pct)}</td><td>${fmt(bb.fb_pct)}</td><td>${fmt(bb.iffb_pct)}</td><td>${fmt(bb.hr_per_fb_pct)}</td></tr>`;
+    });
+    table.innerHTML = rows;
+  }
+}
+
+function renderTeamPlateDiscipline() {
+  renderPitchTypeSection(teamSplitsData?.pitch_types, 'team-plate-discipline-summary', 'team-plate-discipline-table', 'pd');
+}
+function renderTeamBattedBall() {
+  renderPitchTypeSection(teamSplitsData?.pitch_types, 'team-batted-ball-summary', 'team-batted-ball-table', 'bb');
+}
+
+function renderBatterTable() {
+  const splitsBatters = new Map((teamSplitsData?.batters || []).map((b) => [b.batter_id, b]));
+  const merged = (teamBattersData?.batters || [])
+    .filter((b) => b.season && b.season.pa > 0)
+    .map((b) => ({
+      name: b.name,
+      pa: b.season.pa,
+      ba: b.season.avg,
+      k_pct: b.season.k_pct,
+      bb_pct: b.season.bb_pct,
+      whiff_pct: splitsBatters.get(b.player_id)?.whiff_pct ?? null,
+      chase_pct: splitsBatters.get(b.player_id)?.chase_pct ?? null,
+    }))
+    .sort((a, b) => b.pa - a.pa)
+    .slice(0, 9);
+
+  let rows = '<tr><th>#</th><th>BATTER</th><th>PA</th><th>BA</th><th>K%</th><th>WHIFF%</th><th>CHASE%</th><th>BB%</th></tr>';
+  merged.forEach((b, i) => {
+    const fmt1 = (v) => (v != null ? v.toFixed(1) + '%' : '\u2014');
+    rows += `<tr>
+      <td class="batter-chev">&rsaquo;</td>
+      <td><div class="batter-row-name"><div class="b-avatar">${initialsFor(b.name)}</div><span class="name-cell" style="font-weight:600;">${b.name}</span></div></td>
+      <td>${b.pa}</td>
+      <td>${b.ba != null ? b.ba.toFixed(3) : '\u2014'}</td>
+      <td>${fmt1(b.k_pct)}</td>
+      <td>${fmt1(b.whiff_pct)}</td>
+      <td>${fmt1(b.chase_pct)}</td>
+      <td>${fmt1(b.bb_pct)}</td>
+    </tr>`;
+  });
+  document.getElementById('opp-batter-table').innerHTML = rows;
+}
+
+async function loadDeepDive(hand) {
+  if (!currentPitcher || !currentPitcher.player_id || !currentPitcher.opponent) return;
+  const titleEl = document.getElementById('deepdive-title');
+  titleEl.textContent = `${currentPitcher.opponent} vs ${currentPitcher.name} arsenal \u2014 deep dive`;
+
+  try {
+    const res = await fetch(`/api/team-splits?team=${encodeURIComponent(currentPitcher.opponent)}&pitcherId=${currentPitcher.player_id}`);
+    deepDiveData = await res.json();
+  } catch (err) {
+    return;
+  }
+  renderDeepDiveTable();
+}
+
+function renderDeepDiveTable() {
+  const pitchTypes = deepDiveData?.pitch_types || [];
+  const table = document.getElementById('deepdive-table');
+  const fmt = (v) => (v != null ? v.toFixed(1) + '%' : '\u2014');
+
+  if (pitchTypes.length === 0) {
+    table.innerHTML = '<tr><td style="color:var(--text-faint);padding:12px 8px;">Not enough head-to-head pitch data yet.</td></tr>';
+    return;
+  }
+
+  if (deepDiveView === 'plate_discipline') {
+    let rows = '<tr><th>PITCH</th><th>O-SWING%</th><th>Z-SWING%</th><th>SWING%</th><th>O-CONTACT%</th><th>Z-CONTACT%</th><th>ZONE%</th><th>SWSTR%</th></tr>';
+    pitchTypes.forEach((p) => {
+      const pd = p.plate_discipline;
+      rows += `<tr><td class="name-cell">${p.pitch_name || p.pitch_type}</td><td>${fmt(pd.o_swing_pct)}</td><td>${fmt(pd.z_swing_pct)}</td><td>${fmt(pd.swing_pct)}</td><td>${fmt(pd.o_contact_pct)}</td><td>${fmt(pd.z_contact_pct)}</td><td>${fmt(pd.zone_pct)}</td><td>${fmt(pd.swstr_pct)}</td></tr>`;
+    });
+    table.innerHTML = rows;
+  } else {
+    let rows = '<tr><th>PITCH</th><th>LD%</th><th>GB%</th><th>FB%</th><th>IFFB%</th><th>HR/FB</th></tr>';
+    pitchTypes.forEach((p) => {
+      const bb = p.batted_ball;
+      rows += `<tr><td class="name-cell">${p.pitch_name || p.pitch_type}</td><td>${fmt(bb.ld_pct)}</td><td>${fmt(bb.gb_pct)}</td><td>${fmt(bb.fb_pct)}</td><td>${fmt(bb.iffb_pct)}</td><td>${fmt(bb.hr_per_fb_pct)}</td></tr>`;
+    });
+    table.innerHTML = rows;
+  }
+}
+
+function setDeepDiveTab(el) {
+  document.querySelectorAll('#deepdive-subtabs .sub-tab').forEach((t) => t.classList.remove('active'));
+  el.classList.add('active');
+  deepDiveView = el.dataset.view;
+  renderDeepDiveTable();
+}
+
+document.getElementById('lineup-hand-tab-row').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.tool-btn');
+  if (!btn || !btn.dataset.hand) return;
+  document.querySelectorAll('#lineup-hand-tab-row .tool-btn').forEach((b) => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const opponent = currentPitcher.opponent;
+  const tagText = btn.dataset.hand === 'pitcher' ? `vs ${currentPitcher.name}` : (btn.dataset.hand ? `vs ${btn.dataset.hand}HP` : 'Overall');
+  document.getElementById('opp-splits-tag').textContent = tagText;
+
+  try {
+    const url = btn.dataset.hand === 'pitcher'
+      ? `/api/team-splits?team=${encodeURIComponent(opponent)}&pitcherId=${currentPitcher.player_id}`
+      : `/api/team-splits?team=${encodeURIComponent(opponent)}${btn.dataset.hand ? '&hand=' + btn.dataset.hand : ''}`;
+    const res = await fetch(url);
+    teamSplitsData = await res.json();
+  } catch (err) {
+    return;
+  }
+  renderTeamPlateDiscipline();
+  renderTeamBattedBall();
+});
+
+document.getElementById('lineup-expand-all').addEventListener('click', () => {
+  const heads = document.querySelectorAll('#page-detail .subsection-head');
+  const anyCollapsed = Array.from(heads).some((h) => h.classList.contains('collapsed'));
+  heads.forEach((h) => {
+    const body = h.nextElementSibling;
+    if (anyCollapsed) { h.classList.remove('collapsed'); body.classList.remove('collapsed'); }
+    else { h.classList.add('collapsed'); body.classList.add('collapsed'); }
+  });
+});
+
 function weatherCodeLabel(code) {
   if (code == null) return '';
   if (code === 0) return 'Clear';
@@ -1625,6 +1840,7 @@ async function loadPitcherDetail() {
   loadGameLogAndMetrics();
   loadPitcherSplits('');
   loadGameInfo();
+  loadOppositionLineup();
 }
 
 /* ---------------- Real hit-rate chart (gamelog + pitch-metrics) ---------------- */
