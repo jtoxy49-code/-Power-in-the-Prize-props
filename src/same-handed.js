@@ -110,7 +110,7 @@ export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefres
       windowEnd.toISOString().slice(0, 10)
     );
     subrequestCount += 1;
-    windowEnd = windowStart;
+    windowEnd = new Date(windowStart.getTime() - 24 * 60 * 60 * 1000); // avoid re-counting the boundary day in the next chunk
     if (games.length === 0) continue;
 
     // Trim this chunk's games if processing all of them would blow
@@ -145,9 +145,19 @@ export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefres
 
   allStarters.sort((a, b) => new Date(b.date) - new Date(a.date));
 
+  // Defensive dedupe — belt-and-suspenders against any other overlap
+  // source (e.g. a doubleheader), keyed on pitcher + exact date.
+  const seen = new Set();
+  const deduped = allStarters.filter((s) => {
+    const key = `${s.pitcher_id}|${s.date}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
   const result = {
     team_name: teamName,
-    starters: allStarters,
+    starters: deduped,
     subrequests_used: subrequestCount,
     hit_budget_limit: hitBudgetLimit,
     fetched_at: new Date().toISOString(),
