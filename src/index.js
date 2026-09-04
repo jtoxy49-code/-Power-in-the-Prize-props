@@ -17,7 +17,7 @@ import { refreshBatterSeasonStats } from "./batter-season.js";
 import { buildMergedBatterStats } from "./batter-merge.js";
 import { refreshBatterPitchTypeStats, getTeamPitchTypeSplits } from "./batter-pitch-types.js";
 import { getTeamId, getTeamAbbreviation } from "./team-ids.js";
-import { getSameHandedStartersVsTeam } from "./same-handed.js";
+import { getSameHandedStartersVsTeam, fetchPitchHand } from "./same-handed.js";
 import { getCachedPitchMetrics } from "./pitch-metrics.js";
 import { getCachedTeamSplits } from "./team-plate-discipline.js";
 import { getCachedMatchup } from "./batter-vs-pitcher.js";
@@ -262,6 +262,30 @@ export default {
           headers: {
             "content-type": "application/json; charset=utf-8",
             "cache-control": "public, max-age=1800",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    if (url.pathname === "/api/pitcher-hand") {
+      const id = url.searchParams.get("id");
+      if (!id) {
+        return new Response('{"error":"missing id parameter"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const hand = await fetchPitchHand(id);
+        return new Response(JSON.stringify({ id, hand }), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=86400",
           },
         });
       } catch (err) {
