@@ -806,6 +806,30 @@ export default {
         });
       }
     }
+    if (url.pathname === "/debug/past-probable-pitcher") {
+      const teamId = url.searchParams.get("teamId") || "143"; // Phillies
+      const endDate = new Date().toISOString().slice(0, 10);
+      const startDate = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const testUrl = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=${teamId}&startDate=${startDate}&endDate=${endDate}&gameType=R&hydrate=probablePitcher,team`;
+      try {
+        const res = await fetch(testUrl, { headers: { "User-Agent": "Mozilla/5.0 (compatible; PWRPropsBot/1.0)" } });
+        const raw = await res.json();
+        const games = (raw?.dates || []).flatMap((d) => d.games).filter((g) => g.status?.abstractGameState === "Final");
+        const sample = games.slice(-3).map((g) => ({
+          date: g.officialDate,
+          away_probable: g.teams?.away?.probablePitcher || null,
+          home_probable: g.teams?.home?.probablePitcher || null,
+        }));
+        return new Response(JSON.stringify({ finished_games_found: games.length, sample }, null, 2), {
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      } catch (err) {
+        return new Response(`Test failed:\n${err.message}`, {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
     // --- END DEBUG ROUTES ---
 
     return env.ASSETS.fetch(request);
