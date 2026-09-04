@@ -1157,12 +1157,21 @@ async function loadProps() {
 
   let payload, lineupsPayload;
   try {
-    const [oddsRes, lineupsRes] = await Promise.all([
+    // Fetch odds plus several days of lineups (not just today), since
+    // props can cover upcoming games beyond today, and we need those
+    // in our pitcher-name lookup too, not just today's slate.
+    const dates = [0, 1, 2, 3].map((offset) => {
+      const d = new Date();
+      d.setDate(d.getDate() + offset);
+      return d.toISOString().slice(0, 10);
+    });
+    const [oddsRes, ...lineupsResList] = await Promise.all([
       fetch('/api/odds'),
-      fetch('/api/lineups'),
+      ...dates.map((d) => fetch(`/api/lineups?date=${d}`)),
     ]);
     payload = await oddsRes.json();
-    lineupsPayload = await lineupsRes.json();
+    const lineupsPayloads = await Promise.all(lineupsResList.map((r) => r.json()));
+    lineupsPayload = { games: lineupsPayloads.flatMap((p) => p.games || []) };
   } catch (err) {
     propsTable.innerHTML = '<div style="padding:24px 20px;color:var(--text-faint);font-size:13px;">Couldn\'t load odds right now. Try refreshing.</div>';
     return;
