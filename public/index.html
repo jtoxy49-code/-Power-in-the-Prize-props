@@ -901,6 +901,11 @@ body{
 
           <div class="card">
             <div class="card-title" id="same-handed-title">Recent same-handed pitchers</div>
+            <div class="tab-row" id="same-handed-venue-tabs" style="margin-bottom:12px;">
+              <div class="tab-pill active" data-venue="" style="font-family:'Inter',sans-serif; font-weight:600;">Overall</div>
+              <div class="tab-pill" data-venue="at_opponent_park" style="font-family:'Inter',sans-serif; font-weight:600;" id="same-handed-opp-tab">@ Opponent</div>
+              <div class="tab-pill" data-venue="at_starter_home_park" style="font-family:'Inter',sans-serif; font-weight:600;">@ Home</div>
+            </div>
             <table class="data-table" id="same-handed-table">
               <tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr>
             </table>
@@ -1983,6 +1988,10 @@ async function loadGameInfo() {
   }
 }
 
+let sameHandedStarters = [];
+let sameHandedHandLabel = '';
+let sameHandedVenueFilter = '';
+
 async function loadSameHandedPitchers() {
   const table = document.getElementById('same-handed-table');
   const title = document.getElementById('same-handed-title');
@@ -1990,6 +1999,8 @@ async function loadSameHandedPitchers() {
 
   title.textContent = 'Loading\u2026';
   table.innerHTML = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr><tr><td colspan="4" style="color:var(--text-faint);padding:12px 8px;">Loading\u2026</td></tr>';
+  sameHandedVenueFilter = '';
+  document.querySelectorAll('#same-handed-venue-tabs .tab-pill').forEach((el) => el.classList.toggle('active', el.dataset.venue === ''));
 
   try {
     const handRes = await fetch(`/api/pitcher-hand?id=${currentPitcher.player_id}`);
@@ -2003,29 +2014,52 @@ async function loadSameHandedPitchers() {
 
     const res = await fetch(`/api/same-handed?team=${encodeURIComponent(currentPitcher.opponent)}&hand=${hand}`);
     const payload = await res.json();
-    const starters = payload.starters || [];
+    sameHandedStarters = payload.starters || [];
+    sameHandedHandLabel = hand === 'R' ? 'RHP' : 'LHP';
 
-    const handLabel = hand === 'R' ? 'RHP' : 'LHP';
     const oppAbbr = currentPitcher.opponent;
-    const avgK = starters.length > 0 ? (starters.reduce((s, p) => s + p.strikeouts, 0) / starters.length).toFixed(1) : '\u2014';
-    title.textContent = `Recent ${handLabel} vs ${oppAbbr} \u00b7 ${starters.length} same-handed pitchers, K avg ${avgK}`;
+    document.getElementById('same-handed-opp-tab').textContent = `@ ${oppAbbr}`;
 
-    if (starters.length === 0) {
-      table.innerHTML = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr><tr><td colspan="4" style="color:var(--text-faint);padding:12px 8px;">No recent same-handed starts found.</td></tr>';
-      return;
-    }
-
-    let rows = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr>';
-    starters.forEach((p) => {
-      const dateLabel = p.date ? new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-      rows += `<tr><td class="name-cell">${p.pitcher_name}</td><td>${dateLabel}</td><td>${p.innings_pitched ?? '\u2014'}</td><td>${p.strikeouts}</td></tr>`;
-    });
-    table.innerHTML = rows;
+    renderSameHandedTable();
   } catch (err) {
     title.textContent = 'Recent same-handed pitchers';
     table.innerHTML = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr><tr><td colspan="4" style="color:var(--text-faint);padding:12px 8px;">Couldn\'t load.</td></tr>';
   }
 }
+
+function renderSameHandedTable() {
+  const table = document.getElementById('same-handed-table');
+  const title = document.getElementById('same-handed-title');
+  const oppAbbr = currentPitcher.opponent || '';
+
+  const starters = sameHandedVenueFilter
+    ? sameHandedStarters.filter((s) => s.venue_relation === sameHandedVenueFilter)
+    : sameHandedStarters;
+
+  const avgK = starters.length > 0 ? (starters.reduce((s, p) => s + p.strikeouts, 0) / starters.length).toFixed(1) : '\u2014';
+  title.textContent = `Recent ${sameHandedHandLabel} vs ${oppAbbr} \u00b7 ${starters.length} same-handed pitchers, K avg ${avgK}`;
+
+  if (starters.length === 0) {
+    table.innerHTML = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr><tr><td colspan="4" style="color:var(--text-faint);padding:12px 8px;">No recent same-handed starts found in this split.</td></tr>';
+    return;
+  }
+
+  let rows = '<tr><th>PITCHER</th><th>DATE</th><th>IP</th><th>K</th></tr>';
+  starters.forEach((p) => {
+    const dateLabel = p.date ? new Date(p.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    rows += `<tr><td class="name-cell">${p.pitcher_name}</td><td>${dateLabel}</td><td>${p.innings_pitched ?? '\u2014'}</td><td>${p.strikeouts}</td></tr>`;
+  });
+  table.innerHTML = rows;
+}
+
+document.getElementById('same-handed-venue-tabs').addEventListener('click', (e) => {
+  const pill = e.target.closest('.tab-pill');
+  if (!pill) return;
+  document.querySelectorAll('#same-handed-venue-tabs .tab-pill').forEach((el) => el.classList.remove('active'));
+  pill.classList.add('active');
+  sameHandedVenueFilter = pill.dataset.venue;
+  renderSameHandedTable();
+});
 
 async function loadPitcherDetail() {
   if (!currentPitcher || !currentPitcher.name) return;
