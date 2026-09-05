@@ -347,6 +347,45 @@ body{
 }
 .filter-dropdown label:hover{ background:var(--surface-3); color:var(--text); }
 .filter-dropdown input[type="checkbox"]{ accent-color:var(--gold); }
+
+.modal-overlay{
+  display:none;
+  position:fixed; inset:0; background:rgba(0,0,0,0.6);
+  z-index:100; align-items:center; justify-content:center;
+}
+.modal-overlay.open{ display:flex; }
+.modal-box{
+  background:var(--surface); border:1px solid var(--border-soft);
+  border-radius:14px; padding:22px; width:420px; max-width:90vw;
+  max-height:80vh; display:flex; flex-direction:column;
+}
+.modal-header{ display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px; }
+.modal-title{ font-family:'Barlow Condensed',sans-serif; font-size:20px; font-weight:800; }
+.modal-subtitle{ font-size:12.5px; color:var(--text-dim); margin-bottom:16px; }
+.modal-close{ background:none; border:none; color:var(--text-faint); font-size:20px; cursor:pointer; line-height:1; }
+.modal-close:hover{ color:var(--text); }
+.modal-search{
+  width:100%; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:9px; padding:10px 12px; color:var(--text); font-size:13px;
+  margin-bottom:14px; font-family:'Inter',sans-serif;
+}
+.modal-list{ overflow-y:auto; flex:1; margin-bottom:16px; }
+.modal-list label{
+  display:flex; align-items:center; gap:10px;
+  padding:10px 4px; cursor:pointer; font-size:13px; font-weight:600;
+  letter-spacing:0.3px; color:var(--text);
+}
+.modal-list label:hover{ color:var(--gold-soft); }
+.modal-list input[type="checkbox"]{ accent-color:var(--gold); width:16px; height:16px; }
+.modal-footer{ display:flex; justify-content:flex-end; gap:10px; }
+.modal-btn{
+  font-size:13px; font-weight:600; padding:9px 18px; border-radius:9px;
+  cursor:pointer; border:none; font-family:'Inter',sans-serif;
+}
+.modal-btn.cancel{ background:var(--surface-3); color:var(--text-dim); }
+.modal-btn.cancel:hover{ background:var(--surface-2); }
+.modal-btn.done{ background:var(--gold); color:#3A2900; }
+.modal-btn.done:hover{ background:var(--gold-soft); }
 .back-btn.disabled{ opacity:0.45; cursor:not-allowed; }
 .back-btn.disabled:hover{ background:var(--surface); color:var(--text-dim); }
 
@@ -800,9 +839,28 @@ body{
           <div class="filter-dropdown" id="pitchers-filter-dropdown"></div>
         </div>
         <div class="chip active" id="main-lines-toggle">Main lines only</div>
+        <div class="chip" id="propositions-filter-chip">Propositions</div>
         <div class="chip" id="over-under-toggle">Over/Under</div>
         <div class="chip" id="odds-sort-toggle">Odds</div>
         <div class="chip clear" id="clear-all-filters">&times; Clear all</div>
+      </div>
+
+      <div class="modal-overlay" id="propositions-modal">
+        <div class="modal-box">
+          <div class="modal-header">
+            <div>
+              <div class="modal-title">Filter by proposition</div>
+              <div class="modal-subtitle">Select one or more prop markets</div>
+            </div>
+            <button class="modal-close" id="propositions-modal-close">&times;</button>
+          </div>
+          <input class="modal-search" id="propositions-search" placeholder="Search\u2026">
+          <div class="modal-list" id="propositions-list"></div>
+          <div class="modal-footer">
+            <button class="modal-btn cancel" id="propositions-cancel">Cancel</button>
+            <button class="modal-btn done" id="propositions-done">Done</button>
+          </div>
+        </div>
       </div>
 
       <div class="props-table" id="props-table">
@@ -1174,6 +1232,8 @@ let opponentByPitcher = {};
 let selectedTeams = new Set();
 let selectedGames = new Set();
 let selectedPitchers = new Set();
+let selectedMarkets = new Set();
+let pendingSelectedMarkets = new Set();
 let overUnderFilter = null; // null | 'Over' | 'Under'
 let oddsSortMode = 'default'; // 'default' | 'best' | 'worst'
 
@@ -1252,6 +1312,9 @@ function renderPropsRows() {
   }
   if (selectedPitchers.size > 0) {
     props = props.filter((p) => selectedPitchers.has(p.player_name));
+  }
+  if (selectedMarkets.size > 0) {
+    props = props.filter((p) => selectedMarkets.has(p.market_type));
   }
   if (overUnderFilter) {
     props = props.filter((p) => p.selection === overUnderFilter);
@@ -1341,6 +1404,50 @@ function populateFilterDropdowns() {
   buildCheckboxes(pitchers, selectedPitchers, 'pitchers-filter-dropdown');
 }
 
+function renderPropositionsList(searchText) {
+  const marketTypes = [...new Set(allProps.map((p) => p.market_type))];
+  const list = document.getElementById('propositions-list');
+  const filtered = searchText
+    ? marketTypes.filter((m) => marketLabel(m).toLowerCase().includes(searchText.toLowerCase()))
+    : marketTypes;
+
+  list.innerHTML = filtered.map((m) => `
+    <label><input type="checkbox" value="${m}" ${pendingSelectedMarkets.has(m) ? 'checked' : ''}> ${marketLabel(m).toUpperCase()}</label>
+  `).join('') || '<div style="color:var(--text-faint);font-size:13px;padding:8px 4px;">No matching markets.</div>';
+
+  list.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) pendingSelectedMarkets.add(cb.value);
+      else pendingSelectedMarkets.delete(cb.value);
+    });
+  });
+}
+
+const propositionsModal = document.getElementById('propositions-modal');
+document.getElementById('propositions-filter-chip').addEventListener('click', () => {
+  pendingSelectedMarkets = new Set(selectedMarkets);
+  renderPropositionsList('');
+  document.getElementById('propositions-search').value = '';
+  propositionsModal.classList.add('open');
+});
+document.getElementById('propositions-search').addEventListener('input', (e) => {
+  renderPropositionsList(e.target.value);
+});
+document.getElementById('propositions-modal-close').addEventListener('click', () => {
+  propositionsModal.classList.remove('open');
+});
+document.getElementById('propositions-cancel').addEventListener('click', () => {
+  propositionsModal.classList.remove('open');
+});
+document.getElementById('propositions-done').addEventListener('click', () => {
+  selectedMarkets = new Set(pendingSelectedMarkets);
+  const chip = document.getElementById('propositions-filter-chip');
+  chip.textContent = selectedMarkets.size > 0 ? `Propositions (${selectedMarkets.size})` : 'Propositions';
+  chip.classList.toggle('active', selectedMarkets.size > 0);
+  propositionsModal.classList.remove('open');
+  renderPropsRows();
+});
+
 function setupFilterDropdown(chipId, dropdownId) {
   const chip = document.getElementById(chipId);
   const dropdown = document.getElementById(dropdownId);
@@ -1385,10 +1492,14 @@ document.getElementById('clear-all-filters').addEventListener('click', () => {
   selectedTeams.clear();
   selectedGames.clear();
   selectedPitchers.clear();
+  selectedMarkets.clear();
   overUnderFilter = null;
   oddsSortMode = 'default';
   mainLinesOnly = true;
   document.getElementById('main-lines-toggle').classList.add('active');
+  const propsChip = document.getElementById('propositions-filter-chip');
+  propsChip.textContent = 'Propositions';
+  propsChip.classList.remove('active');
   const ouBtn = document.getElementById('over-under-toggle');
   ouBtn.textContent = 'Over/Under';
   ouBtn.classList.remove('active');
