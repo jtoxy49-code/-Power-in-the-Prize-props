@@ -386,6 +386,18 @@ body{
 .modal-btn.cancel:hover{ background:var(--surface-2); }
 .modal-btn.done{ background:var(--gold); color:#3A2900; }
 .modal-btn.done:hover{ background:var(--gold-soft); }
+
+.alt-line-option{
+  display:flex; align-items:center; justify-content:space-between;
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:8px; padding:10px 12px; cursor:pointer;
+  font-size:13px; font-weight:600; color:var(--text);
+  font-family:'IBM Plex Mono',monospace;
+}
+.alt-line-option:hover{ background:var(--surface-3); }
+.alt-line-option.selected{ background:rgba(46,204,113,0.15); border-color:var(--green); color:var(--green); }
+.alt-line-option.unavailable{ opacity:0.35; cursor:not-allowed; pointer-events:none; }
+.alt-line-row{ display:flex; gap:10px; margin-bottom:8px; }
 .back-btn.disabled{ opacity:0.45; cursor:not-allowed; }
 .back-btn.disabled:hover{ background:var(--surface); color:var(--text-dim); }
 
@@ -914,9 +926,23 @@ body{
           </div>
         </div>
         <div class="btn-row">
-          <div class="filter-wrap">
-            <button class="btn btn-ghost" id="alt-lines-btn">Alt lines</button>
-            <div class="filter-dropdown" id="alt-lines-dropdown" style="right:0; left:auto; min-width:240px;"></div>
+          <button class="btn btn-ghost" id="alt-lines-btn">Alt lines</button>
+        </div>
+      </div>
+
+      <div class="modal-overlay" id="alt-lines-modal">
+        <div class="modal-box" style="width:360px;">
+          <div class="modal-header">
+            <div class="modal-title">Available odds</div>
+            <button class="modal-close" id="alt-lines-modal-close">&times;</button>
+          </div>
+          <div style="display:flex; gap:10px; margin-bottom:8px;">
+            <div style="flex:1; font-size:12px; font-weight:700; color:var(--green); letter-spacing:0.3px;">OVER</div>
+            <div style="flex:1; font-size:12px; font-weight:700; color:var(--text-dim); letter-spacing:0.3px;">UNDER</div>
+          </div>
+          <div class="modal-list" id="alt-lines-list" style="max-height:280px;"></div>
+          <div class="modal-footer" style="justify-content:stretch;">
+            <button class="modal-btn done" id="alt-lines-done" style="width:100%; background:var(--green); color:#062b16;">DONE</button>
           </div>
         </div>
       </div>
@@ -2176,56 +2202,87 @@ document.getElementById('same-handed-venue-tabs').addEventListener('click', (e) 
   renderSameHandedTable();
 });
 
+let pendingAltLine = null;
+let pendingAltSelection = null;
+let altLinesMatches = [];
+
 async function loadAltLines() {
-  const dropdown = document.getElementById('alt-lines-dropdown');
+  const list = document.getElementById('alt-lines-list');
   if (!currentPitcher.name || !currentPitcher.statKey) {
-    dropdown.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">No odds context for this view.</div>';
+    list.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">No odds context for this view.</div>';
     return;
   }
-  dropdown.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">Loading\u2026</div>';
+  list.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">Loading\u2026</div>';
   try {
     const res = await fetch('/api/odds');
     const payload = await res.json();
     const marketType = STATKEY_TO_MARKET[currentPitcher.statKey];
-    const matches = (payload.props || []).filter((p) => p.player_name === currentPitcher.name && p.market_type === marketType);
+    altLinesMatches = (payload.props || []).filter((p) => p.player_name === currentPitcher.name && p.market_type === marketType);
 
-    if (matches.length === 0) {
-      dropdown.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">No other lines found for this market right now.</div>';
+    if (altLinesMatches.length === 0) {
+      list.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">No lines found for this market right now.</div>';
       return;
     }
 
-    matches.sort((a, b) => Number(a.line) - Number(b.line) || (a.selection === b.selection ? 0 : a.selection === 'Over' ? -1 : 1));
-
-    dropdown.innerHTML = matches.map((p) => {
-      const bestOdds = Math.max(...p.books.map((b) => b.odds_american));
-      const val = bestOdds > 0 ? `+${bestOdds}` : bestOdds;
-      const isCurrent = Number(p.line) === Number(currentPitcher.line) && p.selection === currentPitcher.selection;
-      return `<label style="justify-content:space-between; ${isCurrent ? 'color:var(--gold-soft);' : ''}" data-line="${p.line}" data-selection="${p.selection}">${p.selection} ${p.line} <span style="color:var(--text-faint);">${val}</span></label>`;
-    }).join('');
-
-    dropdown.querySelectorAll('label').forEach((el) => {
-      el.addEventListener('click', () => {
-        currentPitcher.line = Number(el.dataset.line);
-        currentPitcher.selection = el.dataset.selection;
-        document.getElementById('detail-market').textContent = `${marketLabel(marketType)} \u00b7 ${currentPitcher.selection} ${currentPitcher.line}`;
-        dropdown.classList.remove('open');
-        renderChart();
-      });
-    });
+    pendingAltLine = currentPitcher.line;
+    pendingAltSelection = currentPitcher.selection;
+    renderAltLinesList();
   } catch (err) {
-    dropdown.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">Couldn\'t load alt lines.</div>';
+    list.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">Couldn\'t load alt lines.</div>';
   }
 }
 
-document.getElementById('alt-lines-btn').addEventListener('click', (e) => {
-  e.stopPropagation();
-  const dropdown = document.getElementById('alt-lines-dropdown');
-  const wasOpen = dropdown.classList.contains('open');
-  document.querySelectorAll('.filter-dropdown.open').forEach((d) => d.classList.remove('open'));
-  if (!wasOpen) {
-    dropdown.classList.add('open');
-    loadAltLines();
+function renderAltLinesList() {
+  const list = document.getElementById('alt-lines-list');
+  const uniqueLines = [...new Set(altLinesMatches.map((p) => Number(p.line)))].sort((a, b) => a - b);
+  const fmt = (v) => (v == null ? '\u2014' : v > 0 ? `+${v}` : v);
+
+  list.innerHTML = uniqueLines.map((line) => {
+    const overEntry = altLinesMatches.find((p) => Number(p.line) === line && p.selection === 'Over');
+    const underEntry = altLinesMatches.find((p) => Number(p.line) === line && p.selection === 'Under');
+    const overOdds = overEntry ? Math.max(...overEntry.books.map((b) => b.odds_american)) : null;
+    const underOdds = underEntry ? Math.max(...underEntry.books.map((b) => b.odds_american)) : null;
+    const overSelected = pendingAltLine === line && pendingAltSelection === 'Over';
+    const underSelected = pendingAltLine === line && pendingAltSelection === 'Under';
+
+    return `
+      <div class="alt-line-row">
+        <div class="alt-line-option ${overSelected ? 'selected' : ''} ${!overEntry ? 'unavailable' : ''}" data-line="${line}" data-selection="Over">
+          <span>${overSelected ? '\u2713 ' : ''}O ${line}</span><span>${fmt(overOdds)}</span>
+        </div>
+        <div class="alt-line-option ${underSelected ? 'selected' : ''} ${!underEntry ? 'unavailable' : ''}" data-line="${line}" data-selection="Under">
+          <span>${underSelected ? '\u2713 ' : ''}U ${line}</span><span>${fmt(underOdds)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.alt-line-option:not(.unavailable)').forEach((el) => {
+    el.addEventListener('click', () => {
+      pendingAltLine = Number(el.dataset.line);
+      pendingAltSelection = el.dataset.selection;
+      renderAltLinesList();
+    });
+  });
+}
+
+const altLinesModal = document.getElementById('alt-lines-modal');
+document.getElementById('alt-lines-btn').addEventListener('click', () => {
+  altLinesModal.classList.add('open');
+  loadAltLines();
+});
+document.getElementById('alt-lines-modal-close').addEventListener('click', () => {
+  altLinesModal.classList.remove('open');
+});
+document.getElementById('alt-lines-done').addEventListener('click', () => {
+  if (pendingAltLine != null && pendingAltSelection) {
+    currentPitcher.line = pendingAltLine;
+    currentPitcher.selection = pendingAltSelection;
+    const marketType = STATKEY_TO_MARKET[currentPitcher.statKey];
+    document.getElementById('detail-market').textContent = `${marketLabel(marketType)} \u00b7 ${currentPitcher.selection} ${currentPitcher.line}`;
+    renderChart();
   }
+  altLinesModal.classList.remove('open');
 });
 
 function buildShareUrl() {
