@@ -901,7 +901,7 @@ body{
     <div class="page" id="page-detail">
       <div class="detail-top">
         <button class="back-btn" onclick="goPage('props')">&larr; Back to props</button>
-        <button class="back-btn disabled" title="Not available yet">&#128279; Share</button>
+        <button class="back-btn" id="share-btn">&#128279; Share</button>
       </div>
 
       <div class="detail-hero">
@@ -914,7 +914,10 @@ body{
           </div>
         </div>
         <div class="btn-row">
-          <button class="btn btn-ghost disabled" title="Not available yet">Alt lines</button>
+          <div class="filter-wrap">
+            <button class="btn btn-ghost" id="alt-lines-btn">Alt lines</button>
+            <div class="filter-dropdown" id="alt-lines-dropdown" style="right:0; left:auto; min-width:240px;"></div>
+          </div>
         </div>
       </div>
 
@@ -1245,6 +1248,7 @@ const MARKET_TO_STATKEY = {
   player_walks_allowed: "walks",
   player_outs_recorded: "outs",
 };
+const STATKEY_TO_MARKET = { strikeouts: "player_strikeouts", hits_allowed: "player_hits_allowed", earned_runs: "player_earned_runs", walks: "player_walks_allowed", outs: "player_outs_recorded" };
 
 async function loadProps() {
   propsTable.insertAdjacentHTML('beforeend',
@@ -2171,6 +2175,102 @@ document.getElementById('same-handed-venue-tabs').addEventListener('click', (e) 
   sameHandedVenueFilter = pill.dataset.venue;
   renderSameHandedTable();
 });
+
+async function loadAltLines() {
+  const dropdown = document.getElementById('alt-lines-dropdown');
+  if (!currentPitcher.name || !currentPitcher.statKey) {
+    dropdown.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">No odds context for this view.</div>';
+    return;
+  }
+  dropdown.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">Loading\u2026</div>';
+  try {
+    const res = await fetch('/api/odds');
+    const payload = await res.json();
+    const marketType = STATKEY_TO_MARKET[currentPitcher.statKey];
+    const matches = (payload.props || []).filter((p) => p.player_name === currentPitcher.name && p.market_type === marketType);
+
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">No other lines found for this market right now.</div>';
+      return;
+    }
+
+    matches.sort((a, b) => Number(a.line) - Number(b.line) || (a.selection === b.selection ? 0 : a.selection === 'Over' ? -1 : 1));
+
+    dropdown.innerHTML = matches.map((p) => {
+      const bestOdds = Math.max(...p.books.map((b) => b.odds_american));
+      const val = bestOdds > 0 ? `+${bestOdds}` : bestOdds;
+      const isCurrent = Number(p.line) === Number(currentPitcher.line) && p.selection === currentPitcher.selection;
+      return `<label style="justify-content:space-between; ${isCurrent ? 'color:var(--gold-soft);' : ''}" data-line="${p.line}" data-selection="${p.selection}">${p.selection} ${p.line} <span style="color:var(--text-faint);">${val}</span></label>`;
+    }).join('');
+
+    dropdown.querySelectorAll('label').forEach((el) => {
+      el.addEventListener('click', () => {
+        currentPitcher.line = Number(el.dataset.line);
+        currentPitcher.selection = el.dataset.selection;
+        document.getElementById('detail-market').textContent = `${marketLabel(marketType)} \u00b7 ${currentPitcher.selection} ${currentPitcher.line}`;
+        dropdown.classList.remove('open');
+        renderChart();
+      });
+    });
+  } catch (err) {
+    dropdown.innerHTML = '<div style="padding:10px;color:var(--text-faint);font-size:12px;">Couldn\'t load alt lines.</div>';
+  }
+}
+
+document.getElementById('alt-lines-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const dropdown = document.getElementById('alt-lines-dropdown');
+  const wasOpen = dropdown.classList.contains('open');
+  document.querySelectorAll('.filter-dropdown.open').forEach((d) => d.classList.remove('open'));
+  if (!wasOpen) {
+    dropdown.classList.add('open');
+    loadAltLines();
+  }
+});
+
+function buildShareUrl() {
+  const params = new URLSearchParams();
+  if (currentPitcher.name) params.set('pitcher', currentPitcher.name);
+  if (currentPitcher.matchup) params.set('matchup', currentPitcher.matchup);
+  if (currentPitcher.market) params.set('market', currentPitcher.market);
+  if (currentPitcher.line != null) params.set('line', currentPitcher.line);
+  if (currentPitcher.selection) params.set('selection', currentPitcher.selection);
+  if (currentPitcher.statKey) params.set('statKey', currentPitcher.statKey);
+  if (currentPitcher.opponent) params.set('opponent', currentPitcher.opponent);
+  if (currentPitcher.home_team) params.set('home_team', currentPitcher.home_team);
+  if (currentPitcher.game_time) params.set('game_time', currentPitcher.game_time);
+  return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+}
+
+document.getElementById('share-btn').addEventListener('click', async function () {
+  if (!currentPitcher || !currentPitcher.name) return;
+  const url = buildShareUrl();
+  try {
+    await navigator.clipboard.writeText(url);
+    const original = this.innerHTML;
+    this.innerHTML = '\u2713 Copied!';
+    setTimeout(() => { this.innerHTML = original; }, 1800);
+  } catch (err) {
+    window.prompt('Copy this link:', url);
+  }
+});
+
+function tryLoadFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has('pitcher')) return;
+  viewPitcher({
+    name: params.get('pitcher'),
+    matchup: params.get('matchup') || '',
+    market: params.get('market') || '',
+    line: params.has('line') ? Number(params.get('line')) : undefined,
+    selection: params.get('selection') || undefined,
+    statKey: params.get('statKey') || undefined,
+    opponent: params.get('opponent') || undefined,
+    home_team: params.get('home_team') || undefined,
+    game_time: params.get('game_time') || undefined,
+  });
+}
+tryLoadFromUrl();
 
 async function loadPitcherDetail() {
   if (!currentPitcher || !currentPitcher.name) return;
