@@ -1928,11 +1928,14 @@ function renderTeamBattedBall() {
   renderPitchTypeSection(teamSplitsData?.pitch_types, 'team-batted-ball-summary', 'team-batted-ball-table', 'bb');
 }
 
+let batterVsPitcherCache = new Map();
+
 function renderBatterTable() {
   const splitsBatters = new Map((teamSplitsData?.batters || []).map((b) => [b.batter_id, b]));
   const merged = (teamBattersData?.batters || [])
     .filter((b) => b.season && b.season.pa > 0)
     .map((b) => ({
+      player_id: b.player_id,
       name: b.name,
       pa: b.season.pa,
       ba: b.season.avg,
@@ -1944,10 +1947,12 @@ function renderBatterTable() {
     .sort((a, b) => b.pa - a.pa)
     .slice(0, 9);
 
+  batterVsPitcherCache = new Map();
+
   let rows = '<tr><th>#</th><th>BATTER</th><th>PA</th><th>BA</th><th>K%</th><th>WHIFF%</th><th>CHASE%</th><th>BB%</th></tr>';
   merged.forEach((b, i) => {
     const fmt1 = (v) => (v != null ? v.toFixed(1) + '%' : '\u2014');
-    rows += `<tr>
+    rows += `<tr class="batter-main-row" data-batter-id="${b.player_id}" data-batter-name="${b.name}" style="cursor:pointer;">
       <td class="batter-chev">&rsaquo;</td>
       <td><div class="batter-row-name"><div class="b-avatar">${initialsFor(b.name)}</div><span class="name-cell" style="font-weight:600;">${b.name}</span></div></td>
       <td>${b.pa}</td>
@@ -1956,9 +1961,69 @@ function renderBatterTable() {
       <td>${fmt1(b.whiff_pct)}</td>
       <td>${fmt1(b.chase_pct)}</td>
       <td>${fmt1(b.bb_pct)}</td>
+    </tr>
+    <tr class="batter-detail-row" data-for-batter="${b.player_id}" style="display:none;">
+      <td colspan="8" style="padding:12px 16px;background:var(--surface-2);"></td>
     </tr>`;
   });
   document.getElementById('opp-batter-table').innerHTML = rows;
+
+  document.querySelectorAll('.batter-main-row').forEach((row) => {
+    row.addEventListener('click', () => toggleBatterDetail(row));
+  });
+}
+
+async function toggleBatterDetail(row) {
+  const batterId = row.dataset.batterId;
+  const batterName = row.dataset.batterName;
+  const detailRow = document.querySelector(`.batter-detail-row[data-for-batter="${batterId}"]`);
+  const chev = row.querySelector('.batter-chev');
+
+  const isOpen = detailRow.style.display !== 'none';
+  if (isOpen) {
+    detailRow.style.display = 'none';
+    chev.innerHTML = '&rsaquo;';
+    return;
+  }
+  detailRow.style.display = '';
+  chev.innerHTML = '&#8964;'; // downward chevron when expanded
+
+  const cell = detailRow.querySelector('td');
+
+  if (batterVsPitcherCache.has(batterId)) {
+    renderBatterDetailCell(cell, batterVsPitcherCache.get(batterId), batterName);
+    return;
+  }
+
+  cell.innerHTML = '<span style="color:var(--text-faint);font-size:12px;">Loading matchup history\u2026</span>';
+  try {
+    const res = await fetch(`/api/batter-vs-pitcher?batterId=${batterId}&pitcherId=${currentPitcher.player_id}`);
+    const data = await res.json();
+    batterVsPitcherCache.set(batterId, data);
+    renderBatterDetailCell(cell, data, batterName);
+  } catch (err) {
+    cell.innerHTML = '<span style="color:var(--text-faint);font-size:12px;">Couldn\'t load matchup history.</span>';
+  }
+}
+
+function renderBatterDetailCell(cell, data, batterName) {
+  if (!data || data.pa === 0) {
+    cell.innerHTML = `<span style="color:var(--text-faint);font-size:12px;">${batterName} vs ${currentPitcher.name}: no recorded plate appearances in the last 3 seasons.</span>`;
+    return;
+  }
+  const ba = data.ba != null ? data.ba.toFixed(3) : '\u2014';
+  cell.innerHTML = `
+    <div style="font-size:12px; font-weight:700; margin-bottom:8px; color:var(--text);">${batterName} vs ${currentPitcher.name} <span style="color:var(--text-faint); font-weight:500;">(last 3 seasons)</span></div>
+    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+      <div><span style="color:var(--text-faint);font-size:11px;">PA</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.pa}</span></div>
+      <div><span style="color:var(--text-faint);font-size:11px;">AB</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.ab}</span></div>
+      <div><span style="color:var(--text-faint);font-size:11px;">H</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.hits}</span></div>
+      <div><span style="color:var(--text-faint);font-size:11px;">BA</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${ba}</span></div>
+      <div><span style="color:var(--text-faint);font-size:11px;">K</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.strikeouts}</span></div>
+      <div><span style="color:var(--text-faint);font-size:11px;">BB</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.walks}</span></div>
+      <div><span style="color:var(--text-faint);font-size:11px;">HR</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.home_runs}</span></div>
+    </div>
+  `;
 }
 
 async function loadDeepDive(hand) {
