@@ -2012,9 +2012,13 @@ function renderBatterDetailCell(cell, data, batterName) {
     return;
   }
   const ba = data.ba != null ? data.ba.toFixed(3) : '\u2014';
-  cell.innerHTML = `
+  const fmt = (v) => (v != null ? v.toFixed(1) + '%' : '\u2014');
+  const fmt3 = (v) => (v != null ? v.toFixed(3) : '\u2014');
+  const pitchTypes = data.pitch_types || [];
+
+  let html = `
     <div style="font-size:12px; font-weight:700; margin-bottom:8px; color:var(--text);">${batterName} vs ${currentPitcher.name} <span style="color:var(--text-faint); font-weight:500;">(last 3 seasons)</span></div>
-    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:14px;">
       <div><span style="color:var(--text-faint);font-size:11px;">PA</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.pa}</span></div>
       <div><span style="color:var(--text-faint);font-size:11px;">AB</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.ab}</span></div>
       <div><span style="color:var(--text-faint);font-size:11px;">H</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.hits}</span></div>
@@ -2024,6 +2028,63 @@ function renderBatterDetailCell(cell, data, batterName) {
       <div><span style="color:var(--text-faint);font-size:11px;">HR</span> <span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${data.home_runs}</span></div>
     </div>
   `;
+
+  if (pitchTypes.length === 0) {
+    html += `<div style="color:var(--text-faint);font-size:11px;">No pitch-level breakdown available for this sample.</div>`;
+    cell.innerHTML = html;
+    return;
+  }
+
+  html += `<div style="font-size:11px; font-weight:700; color:var(--text-faint); letter-spacing:0.4px; margin-bottom:6px;">VS ${currentPitcher.name.toUpperCase()} PITCH MIX</div>`;
+  html += `<div class="scroll-x" style="margin-bottom:14px;"><table class="data-table" style="min-width:640px;">
+    <tr><th>PITCH</th><th>USAGE</th><th>PA</th><th>BA</th><th>xBA</th><th>xwOBA<span title="Approximate — batted-ball-only average, not full plate-appearance-weighted wOBA">&#9432;</span></th><th>HARD%</th><th>WHIFF%</th><th>K%</th><th>BB%</th><th>RV/100<span title="Approximate — sign convention not independently verified">&#9432;</span></th></tr>
+    ${pitchTypes.map((p) => `<tr>
+      <td class="name-cell">${p.pitch_name || p.pitch_type}</td>
+      <td>${fmt(p.usage_pct)}</td>
+      <td>${p.pa}</td>
+      <td>${fmt3(p.ba)}</td>
+      <td>${fmt3(p.xba)}</td>
+      <td>${fmt3(p.xwoba)}</td>
+      <td>${fmt(p.hard_hit_pct)}</td>
+      <td>${fmt(p.whiff_pct)}</td>
+      <td>${fmt(p.k_pct)}</td>
+      <td>${fmt(p.bb_pct)}</td>
+      <td>${p.rv_per_100 != null ? (p.rv_per_100 > 0 ? '+' : '') + p.rv_per_100 : '\u2014'}</td>
+    </tr>`).join('')}
+  </table></div>`;
+
+  html += `<div style="font-size:11px; font-weight:700; color:var(--text-faint); letter-spacing:0.4px; margin-bottom:6px;">PLATE DISCIPLINE VS EACH PITCH</div>`;
+  html += `<div class="scroll-x" style="margin-bottom:14px;"><table class="data-table" style="min-width:640px;">
+    <tr><th>PITCH</th><th>PA</th><th>O-SWING%</th><th>Z-SWING%</th><th>SWING%</th><th>O-CONTACT%</th><th>Z-CONTACT%</th><th>CONTACT%</th><th>ZONE%</th><th>SWSTR%</th></tr>
+    ${pitchTypes.map((p) => { const pd = p.plate_discipline; return `<tr>
+      <td class="name-cell">${p.pitch_name || p.pitch_type}</td>
+      <td>${pd.pa}</td>
+      <td>${fmt(pd.o_swing_pct)}</td>
+      <td>${fmt(pd.z_swing_pct)}</td>
+      <td>${fmt(pd.swing_pct)}</td>
+      <td>${fmt(pd.o_contact_pct)}</td>
+      <td>${fmt(pd.z_contact_pct)}</td>
+      <td>${fmt(pd.contact_pct)}</td>
+      <td>${fmt(pd.zone_pct)}</td>
+      <td>${fmt(pd.swstr_pct)}</td>
+    </tr>`; }).join('')}
+  </table></div>`;
+
+  html += `<div style="font-size:11px; font-weight:700; color:var(--text-faint); letter-spacing:0.4px; margin-bottom:6px;">BATTED BALL VS EACH PITCH</div>`;
+  html += `<div class="scroll-x"><table class="data-table" style="min-width:560px;">
+    <tr><th>PITCH</th><th>PA</th><th>LD%</th><th>GB%</th><th>FB%</th><th>IFFB%</th><th>HR/FB</th></tr>
+    ${pitchTypes.map((p) => { const bb = p.batted_ball; return `<tr>
+      <td class="name-cell">${p.pitch_name || p.pitch_type}</td>
+      <td>${bb.pa}</td>
+      <td>${fmt(bb.ld_pct)}</td>
+      <td>${fmt(bb.gb_pct)}</td>
+      <td>${fmt(bb.fb_pct)}</td>
+      <td>${fmt(bb.iffb_pct)}</td>
+      <td>${fmt(bb.hr_per_fb_pct)}</td>
+    </tr>`; }).join('')}
+  </table></div>`;
+
+  cell.innerHTML = html;
 }
 
 async function loadDeepDive(hand) {
