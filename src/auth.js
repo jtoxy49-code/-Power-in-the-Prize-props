@@ -88,9 +88,9 @@ function base64UrlDecode(str) {
   return decodeURIComponent(escape(atob(padded)));
 }
 
-export async function createSessionCookie(discordUserId, username, secret, ttlSeconds = 30 * 24 * 60 * 60) {
+export async function createSessionCookie(discordUserId, username, avatarHash, secret, ttlSeconds = 30 * 24 * 60 * 60) {
   const expiry = Math.floor(Date.now() / 1000) + ttlSeconds;
-  const payloadStr = base64UrlEncode(JSON.stringify({ id: discordUserId, username, exp: expiry }));
+  const payloadStr = base64UrlEncode(JSON.stringify({ id: discordUserId, username, avatar: avatarHash, exp: expiry }));
   const signature = await hmacSign(payloadStr, secret);
   const token = `${payloadStr}.${signature}`;
   return `pwr_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${ttlSeconds}`;
@@ -118,5 +118,5 @@ export async function verifySessionCookie(cookieHeader, secret) {
   }
   if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null; // expired
 
-  return { id: payload.id, username: payload.username };
+  return { id: payload.id, username: payload.username, avatar: payload.avatar };
 }
