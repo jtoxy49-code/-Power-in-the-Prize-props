@@ -24,6 +24,98 @@ import { getCachedMatchup } from "./batter-vs-pitcher.js";
 import { getCachedPitcherSplits } from "./pitcher-splits.js";
 import { getDiscordAuthUrl, exchangeCodeForUser, hasPremiumRole, createSessionCookie, verifySessionCookie } from "./auth.js";
 
+function getLoginPageHtml() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PWR Props — Log In</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:#0A080F;
+  color:#F4F1FA;
+  font-family:'Inter',sans-serif;
+  min-height:100vh;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+.login-card{
+  background:#131020;
+  border:1px solid #2B2540;
+  border-radius:16px;
+  padding:40px 36px;
+  width:100%;
+  max-width:400px;
+  text-align:center;
+  position:relative;
+  overflow:hidden;
+}
+.login-card::before{
+  content:"";
+  position:absolute; top:-60px; left:-60px;
+  width:220px; height:220px;
+  background:radial-gradient(circle, rgba(124,58,237,0.35) 0%, rgba(124,58,237,0) 70%);
+}
+.brand-row{ display:flex; align-items:center; justify-content:center; gap:9px; margin-bottom:28px; position:relative; }
+.bolt{ width:24px; height:24px; }
+.bolt path{ fill:#F5B400; }
+.brand-name{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:800; font-size:24px; letter-spacing:0.5px;
+}
+.brand-name span{ color:#F5B400; }
+.vip-badge{
+  background:#F5B400; color:#3A2900;
+  font-family:'Barlow Condensed',sans-serif; font-weight:700;
+  font-size:11px; letter-spacing:0.6px;
+  padding:2px 8px; border-radius:4px; margin-left:6px;
+}
+h1{
+  font-family:'Barlow Condensed',sans-serif;
+  font-size:26px; font-weight:800;
+  margin-bottom:10px; position:relative;
+}
+p{
+  font-size:13.5px; color:#A79FC0; line-height:1.55;
+  margin-bottom:28px; position:relative;
+}
+.discord-btn{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  background:#5865F2; color:#fff; text-decoration:none;
+  font-family:'Inter',sans-serif; font-weight:600; font-size:14.5px;
+  padding:13px; border-radius:10px; position:relative;
+  transition:background 0.15s;
+}
+.discord-btn:hover{ background:#4752C4; }
+.discord-btn svg{ width:20px; height:20px; }
+.footnote{
+  margin-top:22px; font-size:11.5px; color:#6E6685;
+  position:relative;
+}
+</style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="brand-row">
+      <svg class="bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+      <div class="brand-name">PWR<span> PROPS</span></div>
+      <div class="vip-badge">VIP</div>
+    </div>
+    <h1>Log in or sign up</h1>
+    <p>PWR Props is exclusive to Power in the Prize premium members. Continue with Discord to verify your access.</p>
+    <a class="discord-btn" href="/login">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.076.076 0 0 0-.04.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.055c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.211 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.211 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+      Continue with Discord
+    </a>
+    <div class="footnote">Not a member yet? Join Power in the Prize on Discord first.</div>
+  </div>
+</body>
+</html>`;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -45,6 +137,18 @@ export default {
       return Response.redirect(authUrl, 302);
     }
 
+    if (url.pathname === "/logout") {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: "/",
+          // Overwrite the session cookie with an already-expired one,
+          // which makes the browser delete it immediately.
+          "Set-Cookie": "pwr_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+        },
+      });
+    }
+
     if (url.pathname === "/auth/callback") {
       const code = url.searchParams.get("code");
       if (!code) {
@@ -57,11 +161,25 @@ export default {
 
         if (!isPremium) {
           return new Response(
-            `<html><body style="background:#0A080F;color:#F4F1FA;font-family:sans-serif;text-align:center;padding:60px 20px;">
-              <h2>Premium access required</h2>
-              <p>This tool is exclusive to Power in the Prize premium members. If you believe this is a mistake, check your role in Discord and try again.</p>
-              <a href="/login" style="color:#F5B400;">Try logging in again</a>
-            </body></html>`,
+            `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0A080F;color:#F4F1FA;font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.card{background:#131020;border:1px solid #2B2540;border-radius:16px;padding:40px 36px;max-width:400px;text-align:center;}
+h1{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;margin-bottom:14px;}
+p{font-size:13.5px;color:#A79FC0;line-height:1.55;margin-bottom:22px;}
+a{color:#F5B400;font-weight:600;text-decoration:none;font-size:13.5px;}
+a:hover{text-decoration:underline;}
+</style></head>
+<body>
+  <div class="card">
+    <h1>Premium access required</h1>
+    <p>PWR Props is exclusive to Power in the Prize premium members. If you believe this is a mistake, double check your role in Discord and try logging in again.</p>
+    <a href="/login">Try logging in again &rarr;</a>
+  </div>
+</body></html>`,
             { status: 403, headers: { "content-type": "text/html; charset=utf-8" } }
           );
         }
@@ -88,7 +206,10 @@ export default {
           headers: { "content-type": "application/json; charset=utf-8" },
         });
       }
-      return Response.redirect(`${url.origin}/login`, 302);
+      return new Response(getLoginPageHtml(), {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
     }
 
     if (url.pathname === "/api/park-factors") {
