@@ -185,7 +185,7 @@ a:hover{text-decoration:underline;}
           );
         }
 
-        const cookie = await createSessionCookie(discordUser.id, env.SESSION_SECRET);
+        const cookie = await createSessionCookie(discordUser.id, discordUser.username, env.SESSION_SECRET);
         return new Response(null, {
           status: 302,
           headers: { Location: "/", "Set-Cookie": cookie },
@@ -204,8 +204,8 @@ a:hover{text-decoration:underline;}
     // by the gate and served the login page's HTML instead of the
     // actual image.
     const LOGIN_PAGE_ASSETS = ["/pwr-logo.png"];
-    const sessionDiscordId = await verifySessionCookie(request.headers.get("Cookie"), env.SESSION_SECRET);
-    if (!sessionDiscordId && !url.pathname.startsWith("/debug/") && !LOGIN_PAGE_ASSETS.includes(url.pathname)) {
+    const session = await verifySessionCookie(request.headers.get("Cookie"), env.SESSION_SECRET);
+    if (!session && !url.pathname.startsWith("/debug/") && !LOGIN_PAGE_ASSETS.includes(url.pathname)) {
       if (url.pathname.startsWith("/api/")) {
         return new Response('{"error":"Not authenticated"}', {
           status: 401,
@@ -215,6 +215,12 @@ a:hover{text-decoration:underline;}
       return new Response(getLoginPageHtml(), {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+
+    if (url.pathname === "/api/me") {
+      return new Response(JSON.stringify({ username: session?.username || null }), {
+        headers: { "content-type": "application/json; charset=utf-8" },
       });
     }
 
