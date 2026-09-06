@@ -80,11 +80,19 @@ async function hmacSign(message, secret) {
   return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-export async function createSessionCookie(discordUserId, secret, ttlSeconds = 30 * 24 * 60 * 60) {
+function base64UrlEncode(str) {
+  return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function base64UrlDecode(str) {
+  const padded = str.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((str.length + 3) % 4);
+  return decodeURIComponent(escape(atob(padded)));
+}
+
+export async function createSessionCookie(discordUserId, username, secret, ttlSeconds = 30 * 24 * 60 * 60) {
   const expiry = Math.floor(Date.now() / 1000) + ttlSeconds;
-  const payload = `${discordUserId}.${expiry}`;
-  const signature = await hmacSign(payload, secret);
-  const token = `${payload}.${signature}`;
+  const payloadStr = base64UrlEncode(JSON.stringify({ id: discordUserId, username, exp: expiry }));
+  const signature = await hmacSign(payloadStr, secret);
+  const token = `${payloadStr}.${signature}`;
   return `pwr_session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${ttlSeconds}`;
 }
 
@@ -94,13 +102,21 @@ export async function verifySessionCookie(cookieHeader, secret) {
   if (!match) return null;
 
   const token = match[1];
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const [discordUserId, expiry, signature] = parts;
+  const dotIdx = token.lastIndexOf(".");
+  if (dotIdx === -1) return null;
+  const payloadStr = token.slice(0, dotIdx);
+  const signature = token.slice(dotIdx + 1);
 
-  const expectedSig = await hmacSign(`${discordUserId}.${expiry}`, secret);
+  const expectedSig = await hmacSign(payloadStr, secret);
   if (expectedSig !== signature) return null; // tampered or wrong secret
-  if (Number(expiry) < Math.floor(Date.now() / 1000)) return null; // expired
 
-  return discordUserId;
+  let payload;
+  try {
+    payload = JSON.parse(base64UrlDecode(payloadStr));
+  } catch (err) {
+    return null;
+  }
+  if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null; // expired
+
+  return { id: payload.id, username: payload.username };
 }
