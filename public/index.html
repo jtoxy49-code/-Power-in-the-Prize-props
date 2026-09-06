@@ -2648,12 +2648,49 @@ function renderChart() {
   document.getElementById('mini-csw').textContent = cswAvg != null ? cswAvg.toFixed(1) + '%' : '\u2014';
 }
 
-document.getElementById('stat-tab-row').addEventListener('click', (e) => {
+async function updateLineForCurrentStat() {
+  if (!currentPitcher.name) return;
+  const marketType = STATKEY_TO_MARKET[selectedStatKey];
+  if (!marketType) return;
+  try {
+    const res = await fetch('/api/odds');
+    const payload = await res.json();
+    const matches = (payload.props || []).filter((p) => p.player_name === currentPitcher.name && p.market_type === marketType);
+
+    if (matches.length === 0) {
+      currentPitcher.line = null;
+      currentPitcher.selection = null;
+      currentPitcher.statKey = selectedStatKey;
+      document.getElementById('detail-market').textContent = `${marketLabel(marketType)} \u00b7 No line posted right now`;
+      return;
+    }
+
+    // Prefer an actual main line, and keep the same Over/Under side if
+    // that side exists for the new market too.
+    const mainLines = matches.filter((p) => p.books.some((b) => b.is_main_line));
+    const pool = mainLines.length > 0 ? mainLines : matches;
+    const chosen = pool.find((p) => p.selection === currentPitcher.selection) || pool[0];
+
+    currentPitcher.line = Number(chosen.line);
+    currentPitcher.selection = chosen.selection;
+    currentPitcher.statKey = selectedStatKey;
+    document.getElementById('detail-market').textContent = `${marketLabel(marketType)} \u00b7 ${chosen.selection} ${chosen.line}`;
+  } catch (err) {
+    // leave the previous line in place on failure rather than breaking the chart
+  }
+}
+
+document.getElementById('stat-tab-row').addEventListener('click', async (e) => {
   const pill = e.target.closest('.tab-pill');
   if (!pill) return;
   document.querySelectorAll('#stat-tab-row .tab-pill').forEach((el) => el.classList.remove('active'));
   pill.classList.add('active');
   selectedStatKey = pill.dataset.stat;
+
+  // The line/selection are specific to whichever prop was originally
+  // clicked — switching stat tabs needs the real posted line for the
+  // NEW market, not a stale line meant for a different stat entirely.
+  await updateLineForCurrentStat();
   renderChart();
 });
 
