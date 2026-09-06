@@ -12,4 +12,14 @@ crons = ["*/10 * * * *", "0 6,23 * * *"]
 
 [[kv_namespaces]]
 binding = "PROPS_DATA"
-id = "791e78dd86124d17873a367e48dd2a00"
+id = "PASTE_YOUR_REAL_KV_ID_HERE"
+
+# Not sensitive on their own — the Client ID is even publicly visible
+# in the OAuth login URL by design, and Guild ID / Role ID are just
+# Discord's internal identifiers, not credentials. Baking these into
+# the deployed config avoids the dashboard's Runtime Variables
+# occasionally not persisting them correctly.
+[vars]
+DISCORD_CLIENT_ID = "1539041781147107400"
+DISCORD_GUILD_ID = "1469350161191800845"
+DISCORD_PREMIUM_ROLE_ID = "1489433371162705940"
