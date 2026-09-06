@@ -740,9 +740,9 @@ body{
 
     <div class="user-card">
       <div class="user-row">
-        <div class="avatar">J</div>
+        <div class="avatar" id="sidebar-avatar">?</div>
         <div class="user-meta">
-          <div class="user-name">jtoxy</div>
+          <div class="user-name" id="sidebar-username">&mdash;</div>
           <div class="user-sub">★ Premium Active</div>
         </div>
       </div>
@@ -760,7 +760,7 @@ body{
           <svg class="bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>
           PWR PROPS RESEARCH
         </div>
-        <h1>Welcome back, jtoxy</h1>
+        <h1 id="home-welcome">Welcome back</h1>
         <p>Multi-book pitcher prop odds, hit-rate history, opposing lineup splits, park factors and full arsenal breakdowns &mdash; the same edge-finding toolkit behind the Power in the Prize picks, now for your own research.</p>
         <div class="btn-row">
           <button class="btn btn-gold" onclick="goPage('props')">Start researching</button>
@@ -1227,6 +1227,25 @@ const MARKET_LABELS = {
   player_hits_allowed: "Hits Allowed",
   player_outs_recorded: "Outs Recorded",
 };
+
+async function loadCurrentUser() {
+  try {
+    const res = await fetch('/api/me');
+    const payload = await res.json();
+    const username = payload.username;
+    if (username) {
+      document.getElementById('sidebar-username').textContent = username;
+      document.getElementById('sidebar-avatar').textContent = username.charAt(0).toUpperCase();
+      document.getElementById('home-welcome').textContent = `Welcome back, ${username}`;
+    } else {
+      document.getElementById('sidebar-username').textContent = 'Member';
+      document.getElementById('home-welcome').textContent = 'Welcome back';
+    }
+  } catch (err) {
+    // leave placeholders on failure — non-critical
+  }
+}
+loadCurrentUser();
 
 const BOOK_LABELS = { draftkings: "DK", fanduel: "FD", betmgm: "MGM", caesars: "CZR" };
 
