@@ -12,7 +12,7 @@ crons = ["*/10 * * * *", "0 6,23 * * *"]
 
 [[kv_namespaces]]
 binding = "PROPS_DATA"
-id = "PASTE_YOUR_REAL_KV_ID_HERE"
+id = "791e78dd86124d17873a367e48dd2a00"
 
 # Not sensitive on their own — the Client ID is even publicly visible
 # in the OAuth login URL by design, and Guild ID / Role ID are just
