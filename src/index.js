@@ -185,7 +185,7 @@ a:hover{text-decoration:underline;}
           );
         }
 
-        const cookie = await createSessionCookie(discordUser.id, discordUser.username, env.SESSION_SECRET);
+        const cookie = await createSessionCookie(discordUser.id, discordUser.username, discordUser.avatar, env.SESSION_SECRET);
         return new Response(null, {
           status: 302,
           headers: { Location: "/", "Set-Cookie": cookie },
@@ -219,7 +219,10 @@ a:hover{text-decoration:underline;}
     }
 
     if (url.pathname === "/api/me") {
-      return new Response(JSON.stringify({ username: session?.username || null }), {
+      const avatarUrl = session?.avatar
+        ? `https://cdn.discordapp.com/avatars/${session.id}/${session.avatar}.png?size=64`
+        : null;
+      return new Response(JSON.stringify({ username: session?.username || null, avatar_url: avatarUrl }), {
         headers: { "content-type": "application/json; charset=utf-8" },
       });
     }
@@ -500,6 +503,31 @@ a:hover{text-decoration:underline;}
         headers: {
           "content-type": "application/json; charset=utf-8",
           "cache-control": "public, max-age=60",
+        },
+      });
+    }
+
+    if (url.pathname === "/api/pitcher-ids") {
+      // Bulk name -> player_id lookup, so the Props board can show
+      // real headshots for every row with one fetch instead of one
+      // call per pitcher. Our stored names are sometimes "Last, First"
+      // (from Savant) — reconstruct "First Last" to match SharpAPI's
+      // format, since that's what the props board actually has.
+      const mergedData = await env.PROPS_DATA.get("stats:merged", "json");
+      const idsByName = {};
+      (mergedData?.pitchers || []).forEach((p) => {
+        if (!p.name || !p.player_id) return;
+        let displayName = p.name;
+        if (displayName.includes(",")) {
+          const [last, first] = displayName.split(",").map((s) => s.trim());
+          displayName = `${first} ${last}`;
+        }
+        idsByName[displayName] = p.player_id;
+      });
+      return new Response(JSON.stringify(idsByName), {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "public, max-age=1800",
         },
       });
     }
