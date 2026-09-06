@@ -22,6 +22,7 @@ import { getCachedPitchMetrics } from "./pitch-metrics.js";
 import { getCachedTeamSplits } from "./team-plate-discipline.js";
 import { getCachedMatchup } from "./batter-vs-pitcher.js";
 import { getCachedPitcherSplits } from "./pitcher-splits.js";
+import { getDiscordAuthUrl, exchangeCodeForUser, hasPremiumRole, createSessionCookie, verifySessionCookie } from "./auth.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -35,6 +36,59 @@ export default {
       if (!env.DEBUG_KEY || url.searchParams.get("key") !== env.DEBUG_KEY) {
         return new Response("Not Found", { status: 404 });
       }
+    }
+
+    // --- Discord OAuth login flow ---
+    if (url.pathname === "/login") {
+      const redirectUri = `${url.origin}/auth/callback`;
+      const authUrl = getDiscordAuthUrl(env.DISCORD_CLIENT_ID, redirectUri);
+      return Response.redirect(authUrl, 302);
+    }
+
+    if (url.pathname === "/auth/callback") {
+      const code = url.searchParams.get("code");
+      if (!code) {
+        return new Response("Missing authorization code.", { status: 400 });
+      }
+      try {
+        const redirectUri = `${url.origin}/auth/callback`;
+        const discordUser = await exchangeCodeForUser(code, env.DISCORD_CLIENT_ID, env.DISCORD_CLIENT_SECRET, redirectUri);
+        const isPremium = await hasPremiumRole(discordUser.id, env.DISCORD_GUILD_ID, env.DISCORD_PREMIUM_ROLE_ID, env.DISCORD_BOT_TOKEN);
+
+        if (!isPremium) {
+          return new Response(
+            `<html><body style="background:#0A080F;color:#F4F1FA;font-family:sans-serif;text-align:center;padding:60px 20px;">
+              <h2>Premium access required</h2>
+              <p>This tool is exclusive to Power in the Prize premium members. If you believe this is a mistake, check your role in Discord and try again.</p>
+              <a href="/login" style="color:#F5B400;">Try logging in again</a>
+            </body></html>`,
+            { status: 403, headers: { "content-type": "text/html; charset=utf-8" } }
+          );
+        }
+
+        const cookie = await createSessionCookie(discordUser.id, env.SESSION_SECRET);
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "/", "Set-Cookie": cookie },
+        });
+      } catch (err) {
+        return new Response(`Login failed: ${err.message}`, { status: 500 });
+      }
+    }
+
+    // --- Premium-role session gate — everything below this point
+    // requires a valid, signed session cookie proving Discord
+    // premium-role membership. Debug routes (already key-gated above)
+    // are exempt, as are /login and /auth/callback themselves.
+    const sessionDiscordId = await verifySessionCookie(request.headers.get("Cookie"), env.SESSION_SECRET);
+    if (!sessionDiscordId && !url.pathname.startsWith("/debug/")) {
+      if (url.pathname.startsWith("/api/")) {
+        return new Response('{"error":"Not authenticated"}', {
+          status: 401,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      return Response.redirect(`${url.origin}/login`, 302);
     }
 
     if (url.pathname === "/api/park-factors") {
