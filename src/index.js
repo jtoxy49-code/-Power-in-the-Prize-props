@@ -27,6 +27,16 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    // --- Debug route gate — every /debug/* route requires a secret
+    // key, set via env.DEBUG_KEY. Returns a plain 404 (not 401/403)
+    // for wrong/missing keys, so unauthorized visitors can't even
+    // confirm these routes exist.
+    if (url.pathname.startsWith("/debug/")) {
+      if (!env.DEBUG_KEY || url.searchParams.get("key") !== env.DEBUG_KEY) {
+        return new Response("Not Found", { status: 404 });
+      }
+    }
+
     if (url.pathname === "/api/park-factors") {
       const team = url.searchParams.get("team");
       if (!team) {
