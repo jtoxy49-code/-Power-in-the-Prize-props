@@ -771,23 +771,23 @@ body{
       <div class="stat-strip">
         <div class="stat-card">
           <div class="stat-label">PROPS TRACKED</div>
-          <div class="stat-value">1,842</div>
+          <div class="stat-value" id="home-stat-props">&mdash;</div>
           <div class="stat-sub">live odds lines</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">PITCHERS COVERED</div>
-          <div class="stat-value">64</div>
-          <div class="stat-sub">confirmed starters this week</div>
+          <div class="stat-value" id="home-stat-pitchers">&mdash;</div>
+          <div class="stat-sub">with live props right now</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">GAMES SLATED</div>
-          <div class="stat-value">15</div>
+          <div class="stat-value" id="home-stat-games">&mdash;</div>
           <div class="stat-sub">today across MLB</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">SPORTSBOOKS</div>
-          <div class="stat-value">2</div>
-          <div class="stat-sub">DK, FD &middot; more on paid tier</div>
+          <div class="stat-value" id="home-stat-books">&mdash;</div>
+          <div class="stat-sub" id="home-stat-books-sub">&nbsp;</div>
         </div>
       </div>
 
@@ -1241,6 +1241,32 @@ const MARKET_LABELS = {
 };
 
 const BOOK_LABELS = { draftkings: "DK", fanduel: "FD", betmgm: "MGM", caesars: "CZR" };
+
+async function loadHomepageStats() {
+  try {
+    const [oddsRes, lineupsRes] = await Promise.all([
+      fetch('/api/odds'),
+      fetch('/api/lineups'),
+    ]);
+    const oddsPayload = await oddsRes.json();
+    const lineupsPayload = await lineupsRes.json();
+
+    const props = oddsPayload.props || [];
+    const uniquePitchers = new Set(props.map((p) => p.player_name));
+    const uniqueBooks = new Set(props.flatMap((p) => p.books.map((b) => b.sportsbook)));
+
+    document.getElementById('home-stat-props').textContent = props.length.toLocaleString();
+    document.getElementById('home-stat-pitchers').textContent = uniquePitchers.size;
+    document.getElementById('home-stat-games').textContent = (lineupsPayload.games || []).length;
+    document.getElementById('home-stat-books').textContent = uniqueBooks.size;
+
+    const bookLabels = Array.from(uniqueBooks).map((b) => BOOK_LABELS[b] || b.slice(0, 3).toUpperCase());
+    document.getElementById('home-stat-books-sub').textContent = bookLabels.length > 0 ? bookLabels.join(', ') : 'none live yet';
+  } catch (err) {
+    // leave placeholders — homepage stats are non-critical, fail quietly
+  }
+}
+loadHomepageStats();
 
 function marketLabel(marketType) {
   if (MARKET_LABELS[marketType]) return MARKET_LABELS[marketType];
