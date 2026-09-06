@@ -1233,9 +1233,14 @@ async function loadCurrentUser() {
     const res = await fetch('/api/me');
     const payload = await res.json();
     const username = payload.username;
+    const avatarEl = document.getElementById('sidebar-avatar');
     if (username) {
       document.getElementById('sidebar-username').textContent = username;
-      document.getElementById('sidebar-avatar').textContent = username.charAt(0).toUpperCase();
+      if (payload.avatar_url) {
+        avatarEl.innerHTML = `<img src="${payload.avatar_url}" alt="${username}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+      } else {
+        avatarEl.textContent = username.charAt(0).toUpperCase();
+      }
       document.getElementById('home-welcome').textContent = `Welcome back, ${username}`;
     } else {
       document.getElementById('sidebar-username').textContent = 'Member';
@@ -1291,6 +1296,7 @@ let allProps = [];
 let mainLinesOnly = true;
 let gameTimeByPitcher = {};
 let opponentByPitcher = {};
+let pitcherIdsByName = {};
 let selectedTeams = new Set();
 let selectedGames = new Set();
 let selectedPitchers = new Set();
@@ -1323,11 +1329,13 @@ async function loadProps() {
       d.setDate(d.getDate() + offset);
       return d.toISOString().slice(0, 10);
     });
-    const [oddsRes, ...lineupsResList] = await Promise.all([
+    const [oddsRes, idsRes, ...lineupsResList] = await Promise.all([
       fetch('/api/odds'),
+      fetch('/api/pitcher-ids'),
       ...dates.map((d) => fetch(`/api/lineups?date=${d}`)),
     ]);
     payload = await oddsRes.json();
+    pitcherIdsByName = await idsRes.json();
     const lineupsPayloads = await Promise.all(lineupsResList.map((r) => r.json()));
     lineupsPayload = { games: lineupsPayloads.flatMap((p) => p.games || []) };
   } catch (err) {
@@ -1416,9 +1424,13 @@ function renderPropsRows() {
       home_team: p.home_team,
       game_time: gameTimeByPitcher[p.player_name] || p.event_start_time || null,
     });
+    const pid = pitcherIdsByName[p.player_name];
+    const avatarHtml = pid
+      ? `<img src="https://img.mlbstatic.com/mlb-photos/image/upload/w_60,q_100/v1/people/${pid}/headshot/67/current" alt="${p.player_name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentElement.textContent='${initialsFor(p.player_name)}';">`
+      : initialsFor(p.player_name);
     row.innerHTML = `
       <div class="prop-player">
-        <div class="prop-avatar">${initialsFor(p.player_name)}</div>
+        <div class="prop-avatar">${avatarHtml}</div>
         <div>
           <div class="prop-name">${p.player_name} &middot; ${matchup}</div>
           <div class="prop-sub">${marketText}</div>
@@ -2516,6 +2528,15 @@ async function loadPitcherDetail() {
 
   currentPitcher.player_id = payload.stats.player_id;
   currentStats = payload.stats;
+  if (currentPitcher.player_id) {
+    const avatarEl = document.getElementById('detail-avatar');
+    const initials = initialsFor(currentPitcher.name);
+    const photoUrl = `https://img.mlbstatic.com/mlb-photos/image/upload/w_120,q_100/v1/people/${currentPitcher.player_id}/headshot/67/current`;
+    // onerror falls back to the plain letter-initials circle if MLB
+    // doesn't have a photo for this player yet (common for very
+    // recent call-ups) — never leaves a broken image icon showing.
+    avatarEl.innerHTML = `<img src="${photoUrl}" alt="${currentPitcher.name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentElement.textContent='${initials}';">`;
+  }
   renderStatisticsTable(payload.stats);
   renderArsenalTable(payload.stats);
   loadGameLogAndMetrics();
