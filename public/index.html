@@ -1999,7 +1999,7 @@ function renderBatterTable() {
     const fmt1 = (v) => (v != null ? v.toFixed(1) + '%' : '\u2014');
     rows += `<tr class="batter-main-row" data-batter-id="${b.player_id}" data-batter-name="${b.name}" style="cursor:pointer;">
       <td class="batter-chev">&rsaquo;</td>
-      <td><div class="batter-row-name"><div class="b-avatar">${initialsFor(b.name)}</div><span class="name-cell" style="font-weight:600;">${b.name}</span></div></td>
+      <td><div class="batter-row-name"><div class="b-avatar">${b.player_id ? `<img src="https://img.mlbstatic.com/mlb-photos/image/upload/w_60,q_100/v1/people/${b.player_id}/headshot/67/current" alt="${b.name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentElement.textContent='${initialsFor(b.name)}';">` : initialsFor(b.name)}</div><span class="name-cell" style="font-weight:600;">${b.name}</span></div></td>
       <td>${b.pa}</td>
       <td>${b.ba != null ? b.ba.toFixed(3) : '\u2014'}</td>
       <td>${fmt1(b.k_pct)}</td>
