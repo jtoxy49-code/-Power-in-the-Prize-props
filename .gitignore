@@ -1,0 +1,6 @@
+# Dependencies
+node_modules/
+
+# Wrangler's local state: local KV (including copies of production data made
+# for testing), dev caches and build output. Never committed.
+.wrangler/

@@ -1,3 +1,5 @@
+import { statNum } from "./gamelog.js";
+
 const MLB_STATS_BASE = "https://statsapi.mlb.com/api/v1";
 
 async function fetchJson(url) {
@@ -74,11 +76,12 @@ async function fetchStatsForDates(playerId, year, targetDates) {
       return {
         date: s.date,
         innings_pitched: stat.inningsPitched ?? null,
-        strikeouts: Number(stat.strikeOuts) || 0,
-        walks: Number(stat.baseOnBalls) || 0,
-        hits_allowed: Number(stat.hits) || 0,
-        earned_runs: Number(stat.earnedRuns) || 0,
-        pitches_thrown: Number(stat.numberOfPitches) || 0,
+        // A stat MLB did not report stays null (missing), never 0; a real 0 stays 0.
+        strikeouts: statNum(stat.strikeOuts),
+        walks: statNum(stat.baseOnBalls),
+        hits_allowed: statNum(stat.hits),
+        earned_runs: statNum(stat.earnedRuns),
+        pitches_thrown: statNum(stat.numberOfPitches),
       };
     });
 }
@@ -99,7 +102,9 @@ export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefres
   const cacheKey = `same-handed:${teamId}`;
   if (!forceRefresh) {
     const cached = await env.PROPS_DATA.get(cacheKey, "json");
-    if (cached && cached.fetched_at) {
+    // A list cached before missing stats were kept as null may hold coerced
+    // zeros, so it is treated as stale.
+    if (cached && cached.fetched_at && cached.missing_as_null) {
       const ageMs = Date.now() - new Date(cached.fetched_at).getTime();
       if (ageMs < 6 * 60 * 60 * 1000) return cached;
     }
@@ -182,6 +187,7 @@ export async function getRecentStartersVsTeam(env, teamId, teamName, forceRefres
     starters: allStarters,
     subrequests_used: subrequestCount,
     hit_budget_limit: hitBudgetLimit,
+    missing_as_null: true,
     fetched_at: new Date().toISOString(),
   };
   await env.PROPS_DATA.put(cacheKey, JSON.stringify(result), { expirationTtl: 12 * 60 * 60 });

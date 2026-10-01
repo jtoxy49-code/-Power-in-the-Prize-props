@@ -81,16 +81,37 @@ async function fetchAllPitcherOdds(env, marketList) {
   return rows;
 }
 
+// DATA-QUALITY GUARD (found 2026-09-28): SharpAPI has sent DraftKings rows
+// labeled player_walks_allowed at 6.5 and 7.5, all non-main, with two-way
+// prices near even money. A starter's walks line sits at 0.5-2.5 and Over 6.5
+// walks would be priced at long odds, so these are some other market under the
+// walks label (not the same pitcher's strikeouts: their prices don't match his
+// strikeout lines). Nothing else in a row tells them apart from real alternate
+// walks lines, which are non-main too, so the line value is the test. Rows above
+// a ceiling never become props; refreshOdds keeps them whole in KV
+// "odds:quarantine" for diagnosis. The frontend applies the same ceiling
+// (LINE_CEILING in public/assets/js/domain.js) as a second guard.
+export const LINE_CEILING = { player_walks_allowed: 4.5 };
+export const implausibleLine = (row) => row.market_type in LINE_CEILING && Number(row.line) > LINE_CEILING[row.market_type];
+
 /**
  * Groups flat odds rows into one entry per (player, market, line),
  * with each sportsbook's price attached — the shape the props board
  * UI actually wants to render (one row per prop, odds side by side).
+ * Rows failing the line ceiling go to `quarantine` instead.
  */
-function groupOddsByProp(rows) {
+export function groupOddsByProp(rows, quarantine = []) {
   const grouped = new Map();
 
   for (const row of rows) {
     if (!row.player_name) continue; // skip anything that isn't a player prop
+    // In-game prices swing with the score and are not pregame lines. SharpAPI
+    // flags them with is_live; a row without the field is kept as before.
+    if (row.is_live === true) continue;
+    if (implausibleLine(row)) {
+      quarantine.push(row);
+      continue;
+    }
 
     const key = `${row.event_id}|${row.market_type}|${row.player_name}|${row.selection_type}|${row.line}`;
 
@@ -129,7 +150,8 @@ function groupOddsByProp(rows) {
 export async function refreshOdds(env) {
   const marketList = await getPitcherMarkets(env);
   const rawRows = await fetchAllPitcherOdds(env, marketList);
-  const props = groupOddsByProp(rawRows);
+  const quarantine = [];
+  const props = groupOddsByProp(rawRows, quarantine);
 
   await env.PROPS_DATA.put(
     "odds:latest",
@@ -138,6 +160,30 @@ export async function refreshOdds(env) {
       updated_at: new Date().toISOString(),
     })
   );
+  await recordQuarantine(env, quarantine);
 
-  console.log(`Odds refresh complete: ${props.length} props stored`);
+  console.log(`Odds refresh complete: ${props.length} props stored, ${quarantine.length} implausible rows quarantined`);
+}
+
+/**
+ * Keeps the most recent set of quarantined rows, each exactly as SharpAPI
+ * sent it (every field, so the real market label can be read), in KV
+ * "odds:quarantine". Written only when the set changes, so a bad market that
+ * recurs every 10 minutes costs one write. Never served to the app.
+ */
+export async function recordQuarantine(env, rows) {
+  if (!rows.length) return;
+  const signature = rows
+    .map((r) => `${r.event_id}|${r.market_type}|${r.player_name}|${r.selection_type}|${r.line}|${r.sportsbook}`)
+    .sort()
+    .join("\n");
+  const previous = await env.PROPS_DATA.get("odds:quarantine", "json");
+  if (previous?.signature === signature) return;
+  for (const r of rows) {
+    console.warn(`Odds quarantined: ${r.sportsbook} ${r.market_type} ${r.player_name} ${r.selection} ${r.line} (main line: ${r.is_main_line}) is above the ${LINE_CEILING[r.market_type]} ceiling`);
+  }
+  await env.PROPS_DATA.put(
+    "odds:quarantine",
+    JSON.stringify({ first_seen_at: new Date().toISOString(), signature, count: rows.length, rows: rows.slice(0, 200) })
+  );
 }

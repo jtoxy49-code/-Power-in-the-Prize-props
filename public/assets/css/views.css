@@ -1,0 +1,791 @@
+/* ======================================================================
+   Shared view pieces
+   ====================================================================== */
+.face {
+  position: relative; width: var(--size); height: var(--size); flex-shrink: 0;
+  border-radius: 50%; overflow: hidden; background: var(--purple-shadow);
+  display: grid; place-items: center;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.face-init { font-family: var(--font-display); font-weight: 700; font-size: max(12px, calc(var(--size) * 0.4)); color: var(--purple-light); }
+.face-tbd { background: var(--ink-3); }
+.face-tbd .face-init { color: var(--text-3); }
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 16px 20px 12px; border-bottom: 1px solid var(--line); }
+.panel-note { font-size: var(--fs-13); color: var(--text-3); }
+.ic.flip { transform: rotate(180deg); }
+.badge {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 10px; background: var(--gold); color: var(--gold-ink);
+  font-family: var(--font-data); font-size: var(--fs-12); font-weight: 600;
+}
+.badge[hidden] { display: none; }
+
+
+/* Shared: the chevron on Home's starters, and the teams label the Board's game band scopes. */
+.go { color: var(--text-3); display: grid; place-items: center; transition: color var(--t-fast) var(--ease); }
+.go svg { width: 18px; height: 18px; }
+.gh-teams { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-17); letter-spacing: 0.02em; color: var(--text); margin-right: 12px; }
+
+/* ======================================================================
+   HOME: today in PWR Props. The slate is the page: each game opens on a
+   hard rule like a Player Detail chapter, with its time as a large figure,
+   the two teams in Barlow, and both starters side by side with the lines
+   posted against them. One fact line replaces the old tool cards.
+   ====================================================================== */
+.home { padding-top: 34px; }
+.hm-head {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title actions" "facts facts" "markets markets";
+  gap: 14px 24px; align-items: end; padding-bottom: 8px;
+}
+.hm-title { grid-area: title; min-width: 0; }
+.hm-h { font-family: var(--font-display); font-weight: 800; font-size: 76px; line-height: 0.8; letter-spacing: 0.005em; text-transform: uppercase; text-wrap: balance; }
+.hm-date { margin-top: 12px; font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+.hm-actions { grid-area: actions; display: flex; align-items: center; gap: 8px; }
+.hm-cta { min-height: 46px; padding: 0 18px; font-size: 18px; }
+.hm-facts { grid-area: facts; list-style: none; display: flex; flex-wrap: wrap; align-items: center; row-gap: 4px; margin-top: 6px; font-size: var(--fs-15); color: var(--text-2); }
+.hm-facts li { white-space: nowrap; }
+/* Every fact carries a leading rule; the list is pulled left by one rule and
+   clipped, so whichever fact starts a line never opens on a stray divider. */
+.hm-facts { margin-left: -29px; clip-path: inset(0 0 0 29px); }
+.hm-facts li::before { content: ""; display: inline-block; width: 1px; height: 14px; margin: 0 14px; vertical-align: -2px; background: var(--line-strong); }
+.hm-markets { grid-area: markets; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; font-size: var(--fs-13); color: var(--text-3); }
+.hm-markets b { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text); }
+
+.hm-slate { margin-top: 30px; }
+.hm-day + .hm-day { margin-top: 56px; }
+/* A day opens like a Player Detail chapter: full rule, chrome tab. */
+.hm-day-h {
+  position: relative; display: flex; align-items: baseline; gap: 14px; padding-top: 22px;
+  font-family: var(--font-display); font-weight: 800; font-size: 36px; line-height: 1; letter-spacing: 0.01em; text-transform: uppercase;
+}
+.hm-day-h::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line-strong); }
+.hm-day-h::after { content: ""; position: absolute; left: 0; top: -2px; width: 56px; height: 5px; background: var(--text); }
+.hm-day-d { font-weight: 700; font-size: 20px; letter-spacing: 0.06em; color: var(--text-3); }
+/* The lead day is already named by the page title: it opens on the rule and its facts. */
+.hm-lead-meta { position: relative; margin-top: 0 !important; padding-top: 18px; }
+.hm-lead-meta::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line-strong); }
+.hm-lead-meta::after { content: ""; position: absolute; left: 0; top: -2px; width: 56px; height: 5px; background: var(--text); }
+.hm-day-meta { margin-top: 10px; font-family: var(--font-ui); font-weight: 400; font-size: var(--fs-13); letter-spacing: 0; text-transform: none; color: var(--text-3); }
+.hm-later > summary { list-style: none; cursor: pointer; flex-wrap: wrap; row-gap: 0; padding-bottom: 4px; min-height: 60px; }
+.hm-later > summary::-webkit-details-marker { display: none; }
+.hm-later > summary svg { width: 20px; height: 20px; align-self: center; color: var(--text-3); transition: transform var(--t-fast) var(--ease); }
+.hm-later[open] > summary svg { transform: rotate(90deg); }
+.hm-later > summary .hm-day-meta { flex-basis: 100%; margin-top: 6px; }
+.hm-later > summary:hover { color: var(--text); }
+.hm-later > summary:hover svg { color: var(--text); }
+.hm-day:not(.hm-later) + .hm-later, .hm-later + .hm-later { margin-top: 28px; }
+
+.hm-games { list-style: none; margin-top: 14px; }
+.hm-game { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 0 20px; padding: 20px 0 22px; border-top: 1px solid var(--line); }
+.hm-games .hm-game:first-child { border-top: 0; }
+.hm-when { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+.hm-clock { white-space: nowrap; }
+.hm-clock b { font-family: var(--font-display); font-weight: 800; font-size: 42px; line-height: 0.82; font-variant-numeric: tabular-nums; }
+.hm-clock i { margin-left: 4px; font-style: normal; font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: 0.06em; color: var(--text-3); }
+/* Game status has its own voice and never borrows gold: Final is chrome at
+   rest, a game in progress carries a live dot, a delay or postponement reads
+   at full strength because it changes the plan. */
+.game-status { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+.game-status.gs-live { color: var(--purple-light); }
+.game-status.gs-live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: gs-pulse 1.8s ease-in-out infinite; }
+@keyframes gs-pulse { 50% { opacity: 0.35; } }
+.game-status.gs-alert { color: var(--text); }
+.hm-match { min-width: 0; }
+.hm-teams { display: flex; align-items: baseline; gap: 12px; }
+.hm-t { font-family: var(--font-display); font-weight: 800; font-size: 34px; line-height: 0.9; letter-spacing: 0.03em; }
+.hm-at { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--text-3); }
+.hm-venue { margin-left: auto; font-size: var(--fs-13); color: var(--text-3); text-align: right; }
+.hm-sides { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 12px; }
+.hm-sp {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 24px; grid-template-areas: "who go" "lines go";
+  align-content: start; gap: 12px 8px; padding: 12px 14px 14px 16px; border-radius: var(--r-data);
+  transition: background-color var(--t-fast) var(--ease);
+}
+.hm-sp + .hm-sp::after { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 1px; background: var(--line); }
+/* The Strike blade marks the starter you're about to open. */
+.hm-sp::before {
+  content: ""; position: absolute; left: 2px; top: 16px; width: 3px; height: 44px;
+  background: var(--gold); transform: skewX(calc(-1 * var(--strike))); opacity: 0; transition: opacity var(--t-fast) var(--ease);
+}
+a.hm-sp:hover, a.hm-sp:focus-visible { background: rgba(232, 237, 246, 0.035); }
+a.hm-sp:hover::before, a.hm-sp:focus-visible::before { opacity: 1; }
+a.hm-sp:hover .go, a.hm-sp:focus-visible .go { color: var(--gold); }
+.hm-sp-off { color: var(--text-3); }
+.hm-who { grid-area: who; display: flex; align-items: center; gap: 14px; min-width: 0; }
+.hm-sp-t { display: flex; flex-direction: column; min-width: 0; }
+.hm-sp-name { display: block; font-family: var(--font-display); font-weight: 800; font-size: 25px; line-height: 0.95; letter-spacing: 0.01em; text-transform: uppercase; overflow-wrap: anywhere; text-wrap: balance; }
+.hm-sp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 5px; font-size: var(--fs-13); color: var(--text-3); }
+.tbd-tag { display: inline-block; padding: 0 6px; border-radius: var(--r-data); background: rgba(227, 168, 87, 0.12); color: var(--warn); font-size: var(--fs-12); font-weight: 600; }
+.lineup-flag { display: inline-flex; align-items: center; gap: 5px; color: var(--pos); font-weight: 600; }
+.lineup-flag svg { width: 15px; height: 15px; }
+.hm-lines { grid-area: lines; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 18px; padding-left: 66px; }
+.hm-line { display: grid; grid-template-columns: 30px 46px auto auto; align-items: baseline; justify-content: start; gap: 10px; }
+.hm-mk { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.04em; color: var(--text-3); }
+.hm-ln { font-family: var(--font-display); font-weight: 800; font-size: 25px; line-height: 1; }
+.hm-px { font-size: var(--fs-14); white-space: nowrap; }
+.hm-px i { margin-right: 5px; font-style: normal; font-size: var(--fs-12); color: var(--text-3); }
+.hm-px .num { color: var(--text); font-weight: 500; }
+.hm-none { grid-area: lines; padding-left: 66px; font-size: var(--fs-13); color: var(--text-3); }
+.hm-sp .go { grid-area: go; align-self: center; }
+.hm-sk { display: grid; gap: 12px; padding: 24px 0; border-top: 1px solid var(--line); }
+.hm-sk .skeleton:first-child { width: 240px; height: 34px; }
+.hm-sk .skeleton:last-child { height: 64px; }
+
+@media (max-width: 1023px) {
+  .hm-h { font-size: 60px; }
+  .hm-game { grid-template-columns: 92px minmax(0, 1fr); }
+  .hm-clock b { font-size: 34px; }
+  .hm-lines { grid-template-columns: minmax(0, 1fr); padding-left: 0; }
+  .hm-none { padding-left: 0; }
+  .hm-sp-name { font-size: 22px; }
+}
+@media (max-width: 767px) {
+  .home { padding-top: 20px; }
+  .hm-head { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "facts" "markets" "actions"; gap: 12px; }
+  .hm-h { font-size: 46px; }
+  .hm-date { margin-top: 8px; font-size: 16px; }
+  .hm-actions { flex-wrap: wrap; }
+  .hm-cta { flex: 1 1 auto; justify-content: center; }
+  .hm-facts { font-size: var(--fs-14); }
+  .hm-slate { margin-top: 22px; }
+  .hm-day + .hm-day { margin-top: 36px; }
+  .hm-day-h { font-size: 28px; padding-top: 18px; }
+  .hm-day-d { font-size: 16px; }
+  .hm-game { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 16px 0 12px; }
+  .hm-when { flex-direction: row; align-items: baseline; gap: 10px; padding-top: 0; }
+  .hm-clock b { font-size: 26px; }
+  .hm-t { font-size: 28px; }
+  .hm-venue { display: none; }
+  .hm-sides { grid-template-columns: minmax(0, 1fr); margin-top: 6px; }
+  .hm-sp { padding: 12px 8px 12px 12px; }
+  .hm-sp + .hm-sp::after { left: 12px; right: 8px; top: 0; bottom: auto; width: auto; height: 1px; }
+  .hm-sp-name { font-size: 21px; }
+  .hm-lines { grid-template-columns: minmax(0, 1fr); gap: 4px; padding-left: 66px; }
+  .hm-line { grid-template-columns: 28px 42px auto auto; gap: 12px; }
+  .hm-ln { font-size: 22px; }
+  .hm-none { padding-left: 66px; }
+  .hm-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; margin-left: 0; clip-path: none; }
+  .hm-facts li { white-space: normal; }
+  .hm-facts li::before { display: none; }
+}
+
+/* ======================================================================
+   BOARD: a prop market terminal. Each game opens on a ruled band, each
+   pitcher is established once with his props indented beneath him, the
+   line is a large figure, prices lead with the number and name the book
+   underneath, and the last-10 strip keeps its outcome encoding. Gold is
+   the active filter and the row you're on, nothing else.
+   ====================================================================== */
+.board { padding-top: 34px; }
+.board .page-head { align-items: flex-end; margin-bottom: 18px; }
+.board .h-page { font-family: var(--font-display); font-weight: 800; font-size: 60px; line-height: 0.82; letter-spacing: 0.005em; text-transform: uppercase; }
+.board .lede { margin-top: 10px; }
+.league { align-self: center; }
+.filterbar {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  margin: 0 calc(-1 * clamp(16px, 3vw, 40px)) 14px; padding: 12px clamp(16px, 3vw, 40px);
+  /* Solid, no backdrop-filter: a filter here would become the containing
+     block for the phone filter sheet (position: fixed) and trap it. */
+  background: var(--ink-deep); border-bottom: 1px solid var(--line-strong);
+}
+.fb-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fb-search { flex: 1 1 220px; max-width: 300px; }
+.fb-controls { display: contents; }
+.fb-sheet-only, .fb-sheet-btn { display: none; }
+.fb-markets { display: flex; gap: 6px; flex-wrap: wrap; }
+/* The active prop reads as selected: lit, with the gold underline the segments use. */
+.board .tchip[aria-pressed="true"] { background: rgba(232, 237, 246, 0.08); border-color: rgba(232, 237, 246, 0.28); color: var(--text); box-shadow: inset 0 -2px 0 var(--gold); }
+.board .tchip[aria-pressed="true"] .count { color: var(--text-2); }
+.fb-more .badge { margin-left: 2px; }
+.fb-tokens { display: flex; flex-wrap: wrap; gap: 6px; }
+.fb-tokens:not(:empty) { margin-top: 10px; }
+/* Tablet and up: active-filter chips and Clear all flow in after the last
+   control instead of taking a row of their own, so the sticky bar stays short. */
+@media (min-width: 768px) {
+  .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .fb-row { display: contents; }
+  .fb-tokens { flex: 0 1 auto; min-width: 0; align-items: center; }
+  .fb-tokens:not(:empty) { margin-top: 0; }
+}
+/* Tablet: two deliberate lines, never a third. Search and the props share the
+   first; side, main lines, games and active filters the second. The prop chips
+   hold one line and scroll sideways when there are more than fit. */
+@media (min-width: 768px) and (max-width: 1279px) {
+  .filterbar { gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+  .fb-search { flex: 0 0 240px; max-width: none; }
+  .fb-markets {
+    flex: 1 1 calc(100% - 248px); min-width: 0; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain;
+    scrollbar-width: none; padding: 4px; margin: -4px;
+  }
+  .fb-markets::-webkit-scrollbar { display: none; }
+  .fb-markets .tchip { flex: none; }
+  .fb-markets[data-fade="end"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); }
+  .fb-markets[data-fade="start"] { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 56px), transparent); }
+  .fb-markets[data-fade="both"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 56px, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, transparent, #000 56px, #000 calc(100% - 56px), transparent); }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .fb-search { flex-basis: 200px; }
+  .fb-markets { flex-basis: calc(100% - 208px); }
+}
+.token {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 8px 0 10px;
+  border-radius: var(--r-data); background: var(--ink-3); color: var(--text); font-size: var(--fs-13); font-weight: 500;
+}
+.token svg { width: 14px; height: 14px; color: var(--text-3); }
+.token:hover svg { color: var(--text); }
+/* Clear all is a utility, not a signal: chrome, never gold. */
+.fb-clear { min-height: 30px; font-size: var(--fs-13); color: var(--text-2); }
+.fb-clear:hover { color: var(--text); background: none; text-decoration: underline; text-underline-offset: 3px; }
+
+.b-key { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; margin: 2px 0 6px; font-size: var(--fs-12); color: var(--text-3); }
+.b-key-l { color: var(--text-2); font-weight: 600; }
+.b-key span { display: inline-flex; align-items: center; gap: 7px; }
+.b-key i { display: inline-block; width: 8px; height: 16px; border-radius: 1px; }
+.k-h { background: var(--hit); }
+.k-m { box-shadow: inset 0 0 0 1px var(--miss); background: repeating-linear-gradient(135deg, transparent 0 2px, rgba(164, 74, 90, 0.55) 2px 3px); }
+.k-x { box-shadow: inset 0 0 0 1px var(--text-disabled); }
+
+/* No overflow clipping and no panel box: the table sits on the page. */
+.board-panel { overflow: visible; }
+.board-panel.reveal .bt tbody { animation: bt-in 260ms var(--ease) both; }
+.board-panel.refresh .bt tbody { animation: bt-refresh 180ms var(--ease) both; }
+@keyframes bt-in { from { opacity: 0; transform: translateY(6px); } }
+@keyframes bt-refresh { from { opacity: 0.55; } }
+/* Separate borders: with collapsed borders a sticky header cell leaves its
+   bottom edge unpainted and the rows scrolling under it show through. */
+.bt { width: 100%; font-size: var(--fs-15); border-collapse: separate; border-spacing: 0; }
+.bt thead th {
+  position: sticky; top: var(--fb-h, 0px); z-index: 2;
+  padding: 10px 12px; text-align: left; font-size: var(--fs-12); font-weight: 600; color: var(--text-3);
+  background: var(--ink-0); border-bottom: 1px solid var(--line-strong); white-space: nowrap;
+}
+.bt thead th .sort { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; color: inherit; font-weight: inherit; }
+.bt thead th .sort:hover, .bt thead th[aria-sort="ascending"] .sort, .bt thead th[aria-sort="descending"] .sort { color: var(--text); }
+.bt thead th .sort svg { width: 14px; height: 14px; }
+.bt thead th[aria-sort="none"] .sort svg { opacity: 0.5; }
+.bt th.bt-player { padding-left: 0; }
+.bt.grouped th.bt-player { padding-left: 62px; }
+.bt td { padding: 6px 12px; border-top: 1px solid var(--line); vertical-align: middle; }
+.bt .bt-player { padding-left: 0; }
+.bt .bt-mkt { white-space: nowrap; color: var(--text-2); font-size: var(--fs-14); }
+.bt.grouped .bt-mkt { display: none; }
+.bt .bt-line { width: 104px; }
+.bt .bt-px, .bt th.bt-px { width: 136px; text-align: right; }
+.bt th.bt-px .sort { flex-direction: row-reverse; }
+.bt .bt-trend { width: 236px; }
+.bt .bt-x { width: 56px; text-align: center; padding-right: 0; }
+
+/* Game band: a Player Detail chapter rule, the matchup in Barlow. */
+.game-head th { padding: 34px 0 4px; text-align: left; background: none; }
+tbody .game-head:first-child th { padding-top: 22px; }
+.gh { position: relative; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; padding-top: 16px; }
+.gh::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line-strong); }
+.gh::after { content: ""; position: absolute; left: 0; top: -2px; width: 56px; height: 5px; background: var(--text); }
+.gh .gh-teams { font-family: var(--font-display); font-weight: 800; font-size: 32px; line-height: 0.9; letter-spacing: 0.03em; color: var(--text); }
+.gh .gh-teams i { margin: 0 9px; font-style: normal; font-size: 0.6em; color: var(--text-3); }
+.gh-when { font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-2); }
+.gh-venue { font-size: var(--fs-13); font-weight: 500; color: var(--text-3); }
+.gh-n { margin-left: auto; font-size: var(--fs-12); font-weight: 500; color: var(--text-3); }
+
+/* The pitcher, once. */
+.pl-head th { padding: 14px 0 4px; text-align: left; }
+.plh { display: inline-flex; align-items: center; gap: 14px; min-height: 48px; padding-right: 8px; }
+.plh-name { font-family: var(--font-display); font-weight: 800; font-size: 25px; line-height: 1; letter-spacing: 0.01em; text-transform: uppercase; color: var(--text); transition: color var(--t-fast) var(--ease); }
+.plh-meta { font-size: var(--fs-13); font-weight: 500; color: var(--text-3); }
+.plh:hover .plh-name { color: var(--gold-strong); }
+.plh:focus-visible { outline-offset: 4px; }
+
+/* Sticky pitcher: a compact strip under the column header keeps the game and
+   the pitcher in view through a long prop group. It sits below the header in
+   the stack, so the next pitcher or game band pushes it up underneath. */
+.board { --ps-h: 46px; }
+.pl-stick { position: sticky; top: var(--stick-top, 0px); z-index: 1; height: 0; }
+.ps-in {
+  position: absolute; left: 0; right: 0; top: 0; height: var(--ps-h);
+  display: flex; align-items: center; gap: 16px; padding-right: 12px;
+  background: var(--ink-0); border-bottom: 1px solid var(--line-strong);
+  transform: translateY(var(--ps-y, 0px)); cursor: pointer;
+}
+.ps-game { flex: none; font-family: var(--font-display); font-weight: 800; font-size: 17px; letter-spacing: 0.03em; color: var(--text-2); white-space: nowrap; }
+.ps-who { display: flex; align-items: center; gap: 10px; min-width: 0; padding-left: 16px; border-left: 1px solid var(--line-strong); }
+.ps-face { flex: none; }
+.ps-name { min-width: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; line-height: 1; letter-spacing: 0.01em; text-transform: uppercase; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--t-fast) var(--ease); }
+.ps-team { flex: none; font-size: var(--fs-13); font-weight: 500; color: var(--text-3); }
+.ps-in:hover .ps-name { color: var(--gold-strong); }
+
+/* Prop rows: no rule inside a pitcher's block; the block itself is the grouping. */
+.bt.grouped .bt-row td { border-top-color: transparent; }
+.bt.grouped .bt-row .bt-player { padding-left: 62px; }
+.bt-row { position: relative; cursor: pointer; }
+.bt-row td { transition: background-color var(--t-fast) var(--ease); }
+.bt-row:hover td, .bt-row:focus-within td { background: rgba(232, 237, 246, 0.035); }
+/* The Strike blade marks the row you're on. */
+.bt-row .bt-player { position: relative; }
+.bt-row .bt-player::before {
+  content: ""; position: absolute; left: 4px; top: 10px; bottom: 10px; width: 3px;
+  background: var(--gold); transform: skewX(calc(-1 * var(--strike))); opacity: 0; transition: opacity var(--t-fast) var(--ease);
+}
+.bt.grouped .bt-row .bt-player::before { left: 44px; }
+.bt-row:hover .bt-player::before, .bt-row:focus-within .bt-player::before { opacity: 1; }
+.pl { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 44px; }
+.pl:focus-visible { outline-offset: 4px; }
+.pl-prop { gap: 10px; }
+.pl-mk { font-size: var(--fs-15); font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.bt-row:hover .pl-mk, .bt-row:focus-within .pl-mk { color: var(--text); }
+.pl-alt { padding: 0 6px; border: 1px solid var(--line-strong); border-radius: var(--r-data); font-size: var(--fs-12); color: var(--text-3); }
+.pl-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.pl-name { font-weight: 600; font-size: var(--fs-15); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-meta { font-size: var(--fs-13); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ln { display: inline-flex; align-items: baseline; gap: 6px; }
+.ln b { font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1; color: var(--text); }
+.ln i { font-style: normal; font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: 0.04em; color: var(--text-3); }
+.bt.grouped .ln i { display: none; }
+.px {
+  display: inline-flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 1px;
+  min-width: 100px; min-height: 48px; padding: 4px 10px; border-radius: var(--r-data); border: 1px solid transparent; line-height: 1.15;
+  transition: border-color var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease);
+}
+a.px:hover { border-color: var(--line-strong); background: rgba(232, 237, 246, 0.05); }
+.px .num { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+.px-book { font-size: var(--fs-12); color: var(--text-3); }
+.px-none { color: var(--text-disabled); }
+.px-side { display: none; font-family: var(--font-display); font-weight: 700; font-size: 13px; letter-spacing: 0.06em; color: var(--text-3); }
+
+.trend { display: inline-flex; align-items: center; gap: 10px; }
+.trend-cells { display: inline-flex; gap: 2px; }
+.trend-cells i { width: 9px; height: 22px; border-radius: 1px; }
+.trend-cells i.h { background: var(--hit); }
+.trend-cells i.m { box-shadow: inset 0 0 0 1px var(--miss); background: repeating-linear-gradient(135deg, transparent 0 2px, rgba(164, 74, 90, 0.55) 2px 3px); }
+.trend-cells i.x { background: none; box-shadow: inset 0 0 0 1px var(--text-disabled); }
+.trend-n { min-width: 44px; font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--text-3); }
+.trend-n b { font-weight: 800; font-size: 22px; color: var(--text); }
+.trend-side { font-size: var(--fs-12); color: var(--text-3); }
+.trend-sk { display: inline-block; width: 150px; height: 22px; }
+.trend-na { font-size: var(--fs-13); }
+.expander svg { transition: transform var(--t-fast) var(--ease); }
+
+.bt-detail td { padding: 0; border-top: 0; background: var(--ink-recess); }
+.books { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px 32px; padding: 12px 20px 16px 62px; animation: books-in 180ms var(--ease) both; }
+@keyframes books-in { from { opacity: 0; transform: translateY(-4px); } }
+.books-t { font-size: var(--fs-14); min-width: 360px; }
+.books-t th, .books-t td { padding: 6px 16px 6px 0; text-align: left; font-weight: 500; }
+.books-t thead th { color: var(--text-3); font-size: var(--fs-13); border-bottom: 1px solid var(--line); }
+.books-t tbody th { color: var(--text-2); }
+.books-t .best { color: var(--pos); font-weight: 600; }
+.alts { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; font-size: var(--fs-14); padding-top: 6px; }
+.sk-table { display: flex; flex-direction: column; gap: 10px; padding: 20px; }
+.sk-table .skeleton { height: 44px; }
+.board .sk-table { padding: 20px 0; }
+.board .sk-table .skeleton { height: 48px; }
+.b-empty { padding: 40px 0; border-top: 1px solid var(--line-strong); }
+
+/* Board, tablet and small laptop: prop names already sit in the rows. */
+@media (max-width: 1180px) {
+  .bt .bt-mkt { display: none; }
+  .bt .bt-trend { width: 190px; }
+  .trend-cells i { width: 7px; }
+}
+/* Board, narrow: rows recompose instead of scrolling sideways; nothing is dropped. */
+@media (max-width: 900px) {
+  .bt thead { display: none; }
+  .bt, .bt tbody, .bt tr, .bt td, .bt th { display: block; }
+  .game-head th { padding: 28px 0 2px; }
+  .gh .gh-teams { font-size: 28px; }
+  .pl-head th { padding: 12px 0 2px; }
+  .bt-row {
+    display: grid !important; align-items: center;
+    grid-template-columns: minmax(0, 1fr) auto auto auto 44px;
+    grid-template-areas: "pl ln o u x" "tr tr tr tr tr";
+    gap: 4px 10px; padding: 8px 0 12px; border-top: 1px solid var(--line);
+  }
+  .bt.grouped .bt-row { padding-left: 62px; border-top-color: transparent; }
+  .bt-row td { padding: 0; border: 0; width: auto !important; background: none !important; }
+  .bt-row:hover, .bt-row:focus-within { background: rgba(232, 237, 246, 0.035); }
+  .bt-row .bt-player { grid-area: pl; }
+  .bt.grouped .bt-row .bt-player { padding-left: 0; }
+  .bt-row .bt-player::before { left: -8px; }
+  .bt.grouped .bt-row .bt-player::before { left: -14px; }
+  .bt-row .bt-line { grid-area: ln; }
+  .bt-row td:nth-child(4) { grid-area: o; }
+  .bt-row td:nth-child(5) { grid-area: u; }
+  .bt-row .bt-trend { grid-area: tr; }
+  .bt-row .bt-x { grid-area: x; }
+  .px { min-width: 84px; border-color: var(--line-strong); align-items: flex-start; }
+  .px-side { display: block; }
+  .bt-row .bt-px:empty, .bt-row .bt-px > .px-none[aria-hidden] { display: none; }
+  .books { padding: 12px 16px 16px; }
+  .books-t { min-width: 0; width: 100%; }
+}
+/* Board, phone: the sticky bar is one row (search + Filters); the full
+   filter set opens as a bottom sheet with the same controls. */
+@media (max-width: 767px) {
+  .board { padding-top: 20px; }
+  .board .h-page { font-size: 44px; }
+  .board .expander { width: 44px; height: 44px; }
+  .filterbar { top: var(--topbar-h); margin: 0 -16px 10px; padding: 8px 16px; }
+  .fb-row { gap: 8px; flex-wrap: nowrap; }
+  .fb-search { flex: 1 1 auto; max-width: none; }
+  .fb-search kbd { display: none; }
+  .fb-sheet-btn { display: inline-flex; flex-shrink: 0; }
+  .fb-controls {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: calc(var(--z-sheet) + 1);
+    display: flex; flex-direction: column; align-items: stretch; gap: 16px;
+    max-height: 86dvh; overflow: auto; overscroll-behavior: contain;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+    background: var(--ink-1); border-top: 1px solid var(--line-strong); border-radius: 14px 14px 0 0;
+    transform: translateY(105%); visibility: hidden;
+    transition: transform var(--t-med) var(--ease), visibility 0s linear var(--t-med);
+  }
+  .fb-controls.open { transform: none; visibility: visible; transition: transform var(--t-med) var(--ease); }
+  /* The sticky bar is the sheet's stacking context; lift it over the scrim while open. */
+  .filterbar:has(.fb-controls.open) { z-index: calc(var(--z-sheet) + 1); }
+  .fb-sheet-only { display: flex; }
+  .fb-controls .sheet-head { justify-content: space-between; align-items: center; margin: 0; }
+  .fb-markets { flex-wrap: wrap; }
+  .fb-controls .seg { width: 100%; }
+  .fb-controls .seg button { flex: 1; }
+  .fb-controls .btn { width: 100%; }
+  .fb-tokens:not(:empty) { margin-top: 8px; }
+  .league { display: none; }
+  .b-key { gap: 4px 12px; }
+  .b-key-l { flex-basis: 100%; }
+  .gh-venue { flex-basis: 100%; order: 3; }
+  .gh-n { display: none; }
+  .plh-name { font-size: 22px; }
+  .board { --ps-h: 40px; }
+  .ps-in { gap: 12px; }
+  .ps-game { font-size: 15px; }
+  .ps-who { gap: 8px; padding-left: 12px; }
+  .ps-name { font-size: 17px; }
+}
+/* Phone rows: prop and line lead, both prices beside them, the strip below. */
+@media (max-width: 560px) {
+  .bt-row { grid-template-columns: minmax(0, 1fr) auto auto 44px; grid-template-areas: "pl pl pl x" "ln o u ." "tr tr tr tr"; padding: 10px 0 12px; }
+  .bt.grouped .bt-row { grid-template-columns: minmax(0, 1fr) auto auto auto 40px; grid-template-areas: "pl ln o u x" "tr tr tr tr tr"; padding-left: 16px; column-gap: 8px; }
+  .bt.grouped .pl-mk { white-space: normal; font-size: var(--fs-13); line-height: 1.15; font-family: var(--font-display); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  .bt.grouped .bt-row .bt-player::before { left: -12px; }
+  .ln b { font-size: 26px; }
+  .px { min-width: 76px; padding: 3px 7px; }
+  .px .num { font-size: 17px; }
+  .plh { gap: 12px; }
+  .plh-meta { display: none; }
+  .gh .gh-teams { font-size: 26px; }
+  .trend-cells i { width: 8px; height: 18px; }
+}
+
+/* ======================================================================
+   LINEUP MATCHUPS: a matchup lab. A scoreboard strip picks the game, a
+   versus band establishes the pitcher and the lineup he faces (posted
+   order or the honest fallback), a usage band shows what he throws, and
+   the hitter-by-pitch matrix is the main object. Pitcher's edge is violet,
+   hitter's edge is chrome, small samples are never shaded. Gold is the
+   selected game, side and metric, and the row you're on.
+   ====================================================================== */
+.matchups { padding-top: 34px; }
+.matchups .h-page { font-family: var(--font-display); font-weight: 800; font-size: 60px; line-height: 0.82; letter-spacing: 0.005em; text-transform: uppercase; }
+.mu-head { align-items: flex-end; margin-bottom: 20px; }
+.mu-head .lede { margin-top: 10px; }
+.date-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-13); color: var(--text-3); }
+.date-wrap { position: relative; display: flex; align-items: center; }
+.date-wrap svg { position: absolute; left: 12px; width: 18px; height: 18px; color: var(--text-3); pointer-events: none; }
+.date-wrap input {
+  min-height: 44px; padding: 0 12px 0 38px; background: var(--ink-recess); border: 1px solid var(--line-strong);
+  border-radius: var(--r-data); color: var(--text); font-family: var(--font-data); font-size: var(--fs-14);
+}
+.date-wrap input::-webkit-calendar-picker-indicator { filter: invert(0.85); cursor: pointer; }
+
+/* Scoreboard strip: one cell per game, the selected one lit with a gold bar. */
+.mu-slate-wrap { margin: 0 calc(-1 * var(--page-x)); border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); background: var(--ink-deep); }
+.mu-slate { display: flex; overflow-x: auto; scrollbar-width: none; padding: 0 var(--page-x); }
+.mu-slate::-webkit-scrollbar { display: none; }
+.mu-g {
+  position: relative; flex: none; display: grid; justify-items: start; gap: 2px; min-width: 136px; min-height: 76px;
+  padding: 10px 18px 12px; text-align: left; border-right: 1px solid var(--line); color: var(--text-2);
+  transition: background-color var(--t-fast) var(--ease);
+}
+.mu-g:first-child { border-left: 1px solid var(--line); }
+.mu-g:hover { background: rgba(232, 237, 246, 0.04); color: var(--text); }
+.mu-g[aria-checked="true"] { background: rgba(232, 237, 246, 0.07); color: var(--text); }
+.mu-g[aria-checked="true"]::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: 5px; height: 2px; background: var(--gold); }
+.mu-g:focus-visible { outline-offset: -3px; }
+.mu-g-t { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
+.mu-g-m { font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1; letter-spacing: 0.03em; color: var(--text); }
+.mu-g-m i { margin: 0 5px; font-style: normal; font-size: 0.62em; color: var(--text-3); }
+.mu-g-s { font-size: var(--fs-12); color: var(--text-3); white-space: nowrap; }
+.mu-g-sk { flex: none; width: 136px; height: 56px; margin: 10px 18px 10px 0; }
+
+/* The game opens on the chapter rule, the starter switch on its right. */
+.mu-gamebar { position: relative; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; margin-top: 34px; padding-top: 16px; }
+.mu-gamebar::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line-strong); }
+.mu-gamebar::after { content: ""; position: absolute; left: 0; top: -2px; width: 56px; height: 5px; background: var(--text); }
+.mu-gb-teams { font-family: var(--font-display); font-weight: 800; font-size: 32px; line-height: 0.9; letter-spacing: 0.03em; }
+.mu-gb-teams i { margin: 0 9px; font-style: normal; font-size: 0.6em; color: var(--text-3); }
+.mu-gb-when { font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-2); }
+.mu-gb-venue { font-size: var(--fs-13); color: var(--text-3); }
+.mu-sidesel { margin-left: auto; align-self: center; }
+.mu-sidesel button { font-family: var(--font-display); font-weight: 700; font-size: 17px; letter-spacing: 0.04em; text-transform: uppercase; }
+.mu-sidesel .seg-meta { font-family: var(--font-ui); font-size: var(--fs-12); letter-spacing: 0; text-transform: none; }
+.mu-sidesel button[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* Versus band: the pitcher once, the lineup he faces, its real state. */
+.mu-vs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 24px; padding: 26px 0 34px; }
+.mu-p { display: flex; align-items: center; gap: 22px; min-width: 0; }
+.mu-p-t { min-width: 0; }
+.mu-p-name { font-family: var(--font-display); font-weight: 800; font-size: 64px; line-height: 0.84; letter-spacing: 0.005em; text-transform: uppercase; text-wrap: balance; }
+.mu-p-meta { margin-top: 10px; font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-2); }
+.mu-p-line { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 10px; }
+.mu-p-line div { display: flex; flex-direction: column; }
+.mu-p-line dt { font-size: var(--fs-12); color: var(--text-3); }
+.mu-p-line dd { font-size: var(--fs-15); color: var(--text); }
+.mu-p-line div:first-child dt { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.06em; color: var(--text-2); padding-top: 9px; }
+.mu-p-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 4px; font-size: var(--fs-14); font-weight: 600; color: var(--text-2); }
+.mu-p-link svg { width: 16px; height: 16px; }
+.mu-p-link:hover { color: var(--gold-strong); }
+.mu-vs-word { font-family: var(--font-display); font-weight: 700; font-size: 28px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+.mu-o { display: grid; justify-items: end; text-align: right; min-width: 0; }
+.mu-o-abbr { font-family: var(--font-display); font-weight: 800; font-size: 64px; line-height: 0.84; letter-spacing: 0.03em; }
+.mu-o-name { margin-top: 10px; font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-2); }
+.mu-lu { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: var(--r-data); font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+.mu-lu.on { border-color: rgba(92, 194, 122, 0.45); color: var(--pos); }
+.mu-lu svg { width: 16px; height: 16px; }
+.mu-lu-note { margin-top: 8px; max-width: 46ch; font-size: var(--fs-13); color: var(--text-3); }
+
+/* Section openings share the chapter rule. */
+.mu-sec-h { position: relative; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; padding-top: 16px; }
+.mu-ars > .mu-sec-h::before, .mu-sum > .mu-sec-h::before, .mu-mx-bar::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line-strong); }
+.mu-ars > .mu-sec-h::after, .mu-sum > .mu-sec-h::after, .mu-mx-bar::after { content: ""; position: absolute; left: 0; top: -2px; width: 56px; height: 5px; background: var(--text); }
+.mu-sec-h h3 { font-family: var(--font-display); font-weight: 800; font-size: 28px; line-height: 1; letter-spacing: 0.01em; text-transform: uppercase; }
+.mu-sec-h > span { font-size: var(--fs-13); color: var(--text-3); }
+.mu-note { font-size: var(--fs-13); color: var(--text-3); max-width: 70ch; }
+.mu-note b { color: var(--text); font-weight: 600; }
+
+/* What he throws: usage is width, his whiff rate hangs below. */
+.mu-band { display: flex; gap: 2px; height: 46px; margin-top: 16px; }
+.mu-sl {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px;
+  background: var(--tone); color: var(--ink); overflow: hidden; container-type: inline-size;
+}
+.mu-sl:first-child { border-radius: 2px 0 0 2px; }
+.mu-sl:last-child { border-radius: 0 2px 2px 0; }
+.mu-sl b { min-width: 0; font-family: var(--font-display); font-weight: 800; font-size: 17px; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-sl i { font-style: normal; font-size: var(--fs-13); font-weight: 600; white-space: nowrap; }
+@container (max-width: 104px) { .mu-sl b { display: none; } .mu-sl { justify-content: center; } }
+@container (max-width: 40px) { .mu-sl i { display: none; } }
+.mu-stems { display: flex; gap: 2px; }
+.mu-st { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; min-height: 86px; }
+.mu-stem { flex: none; width: 16px; background: var(--tone); border-radius: 0 0 2px 2px; }
+.mu-st b { margin-top: 6px; font-family: var(--font-display); font-weight: 800; font-size: 19px; line-height: 1; white-space: nowrap; }
+.mu-st b small { font-size: 0.6em; }
+.mu-key { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 12px; font-size: var(--fs-12); color: var(--text-3); }
+.mu-key span { display: inline-flex; align-items: center; gap: 7px; }
+.mu-key i { display: inline-block; flex: none; }
+.mu-key-u { width: 18px; height: 10px; border-radius: 1px; background: var(--text-3); }
+.mu-key-w { width: 4px; height: 14px; border-radius: 0 0 1px 1px; background: var(--text-3); }
+
+/* The lineup vs his mix: computed findings beside the rankings. */
+.mu-sum { margin-top: 44px; }
+.mu-sum-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px 44px; margin-top: 18px; align-items: start; }
+.mu-finds { list-style: none; display: grid; gap: 14px; }
+.mu-finds li { position: relative; padding-left: 18px; font-family: var(--font-display); font-weight: 500; font-size: 21px; line-height: 1.25; color: var(--text-2); text-wrap: pretty; }
+.mu-finds li::before { content: ""; position: absolute; left: 0; top: 0.5em; width: 8px; height: 2px; background: var(--text-3); }
+.mu-finds b { font-weight: 700; color: var(--text); }
+.mu-rks { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.mu-rk h4 { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); }
+.mu-rk h4 small { display: block; margin-top: 2px; font-family: var(--font-ui); font-weight: 400; font-size: var(--fs-12); letter-spacing: 0; text-transform: none; color: var(--text-3); }
+.mu-rk ol { list-style: none; margin-top: 8px; }
+.mu-rk li { display: grid; grid-template-columns: 20px 32px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 46px; border-top: 1px solid var(--line); }
+.mu-rk-o { font-family: var(--font-display); font-weight: 800; font-size: 16px; color: var(--text-3); text-align: center; }
+.mu-rk-n { min-width: 0; font-weight: 600; font-size: var(--fs-14); overflow-wrap: anywhere; }
+.mu-rk-v { font-family: var(--font-display); font-weight: 800; font-size: 24px; }
+.mu-sum-r .mu-note { margin-top: 12px; }
+
+/* The matrix: hitters down, his pitches across, one metric at a time. */
+.mu-mx { margin-top: 48px; }
+.mu-mx-bar { position: relative; display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; padding-top: 16px; }
+.mu-mx-bar .mu-sec-h { padding-top: 0; }
+.mu-mx-bar .mu-sec-h::before, .mu-mx-bar .mu-sec-h::after { display: none; }
+.mx-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin: 16px 0 10px; font-size: var(--fs-12); color: var(--text-3); }
+.mx-key span { display: inline-flex; align-items: center; gap: 3px; }
+.mx-key span i:last-of-type { margin-right: 5px; }
+.mx-key i { display: inline-block; width: 14px; height: 14px; border-radius: 1px; font-style: normal; }
+.k-p2 { background: rgba(93, 33, 184, 0.62); }
+.k-p1 { background: rgba(93, 33, 184, 0.3); }
+.k-0 { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.k-h1 { background: rgba(232, 237, 246, 0.08); box-shadow: inset 0 0 0 1px var(--line); }
+.k-h2 { background: rgba(232, 237, 246, 0.17); }
+.mx-key .k-thin { width: auto; height: auto; font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--text-3); }
+/* Each pitch column keeps a readable width; with a long arsenal on a narrow
+   screen the matrix scrolls inside its frame, never the page. */
+.mx-wrap { position: relative; overflow-x: auto; overscroll-behavior-x: contain; }
+.mx { width: 100%; min-width: calc(var(--who-w, 300px) + var(--cols, 4) * 104px + 194px); table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.mx thead th { background: var(--ink-0); vertical-align: bottom; text-align: left; padding: 10px 12px 12px; border-bottom: 1px solid var(--line-strong); font-weight: 400; }
+.mx-h-who { width: var(--who-w, 300px); padding-left: 0 !important; font-family: var(--font-display); font-weight: 700 !important; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+.mx-h-name { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 800; font-size: 19px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text); }
+.mx-sw { display: inline-block; flex: none; width: 11px; height: 11px; border-radius: 2px; background: var(--tone); margin-right: 6px; vertical-align: -1px; }
+.mx-h-name .mx-sw { margin-right: 0; }
+.mx-h-use { display: block; margin-top: 6px; font-size: var(--fs-12); color: var(--text-2); }
+.mx-use-bar { display: block; height: 3px; margin-bottom: 5px; background: var(--line); }
+.mx-use-bar span { display: block; height: 100%; background: var(--tone, var(--text-3)); }
+.mx-h-lg { display: block; margin-top: 2px; font-size: var(--fs-12); color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mx-h-mix { width: 150px; border-left: 1px solid var(--line-strong); }
+.mx-h-mix .sort { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; font-family: var(--font-display); font-weight: 800; font-size: 19px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text); }
+.mx-h-mix .sort svg { width: 14px; height: 14px; color: var(--text-3); }
+.mx-h-mix[aria-sort="descending"] .sort svg, .mx-h-mix[aria-sort="ascending"] .sort svg { color: var(--gold); }
+.mx-h-x { width: 44px; }
+.mx tbody th, .mx tbody td { border-top: 1px solid var(--line); padding: 6px 12px; text-align: left; vertical-align: middle; }
+.mx .mx-who { position: relative; padding-left: 0; }
+/* The Strike blade marks the hitter you're on. */
+.mx-row .mx-who::before {
+  content: ""; position: absolute; left: -14px; top: 12px; bottom: 12px; width: 3px;
+  background: var(--gold); transform: skewX(calc(-1 * var(--strike))); opacity: 0; transition: opacity var(--t-fast) var(--ease);
+}
+.mx-row:hover .mx-who::before, .mx-row:focus-within .mx-who::before, .mx-row.open .mx-who::before { opacity: 1; }
+.mx-row { cursor: pointer; }
+.mx-who-b { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; text-align: left; color: inherit; }
+.mx-who-b:focus-visible { outline-offset: 2px; }
+.mx-ord { flex: none; width: 26px; font-family: var(--font-display); font-weight: 800; font-size: 28px; line-height: 1; text-align: center; color: var(--text); font-variant-numeric: tabular-nums; }
+/* Ranked by PA, not an order: the numeral is outlined, never set like a lineup slot. */
+.ranked .mx-ord, .ml-ranked .mx-ord { color: transparent; -webkit-text-stroke: 1px var(--text-3); }
+.mx-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mx-name { font-family: var(--font-display); font-weight: 800; font-size: 20px; line-height: 1; letter-spacing: 0.01em; text-transform: uppercase; color: var(--text); overflow-wrap: anywhere; }
+.mx-row:hover .mx-name, .mx-row.open .mx-name { color: var(--gold-strong); }
+.mx-sub { font-size: var(--fs-12); color: var(--text-3); }
+.mx-c b, .mx-mix b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 24px; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.mx-c i, .mx-mix i { display: block; margin-top: 4px; font-style: normal; font-size: var(--fs-12); color: var(--text-3); white-space: nowrap; }
+.mx-c.thin b { font-weight: 700; color: var(--text-3); }
+.mx-c.none b, .mx-mix.none b { color: var(--text-disabled); }
+.mx tbody .mx-c.e-pitcher { background: rgba(93, 33, 184, 0.3); box-shadow: inset 0 0 0 1px var(--ink-0); }
+.mx tbody .mx-c.e-pitcher.e-strong { background: rgba(93, 33, 184, 0.62); }
+.mx tbody .mx-c.e-hitter { background: rgba(232, 237, 246, 0.08); box-shadow: inset 0 0 0 1px var(--ink-0); }
+.mx tbody .mx-c.e-hitter.e-strong { background: rgba(232, 237, 246, 0.17); }
+.mx .mx-mix { border-left: 1px solid var(--line-strong); }
+.mx .mx-mix b { font-size: 26px; }
+.mx .mx-x { text-align: center; color: var(--text-3); }
+.mx .mx-x svg { width: 18px; height: 18px; transition: transform var(--t-fast) var(--ease); }
+/* A posted order breaks after the 3rd and 6th hitters, like a lineup card. */
+.mx-break > th, .mx-break > td { border-bottom: 1px solid var(--line-strong); }
+.mx-lineup > th, .mx-lineup > td { border-top: 2px solid var(--line-strong) !important; padding-top: 10px !important; padding-bottom: 10px !important; }
+.mx-lu-l { display: flex; flex-direction: column; font-family: var(--font-display); font-weight: 800; font-size: 20px; text-transform: uppercase; }
+.mx-lu-l small { font-family: var(--font-ui); font-weight: 400; font-size: var(--fs-12); text-transform: none; color: var(--text-3); }
+.mx .mx-detail > td { padding: 0; border-top: 0; background: var(--ink-recess); }
+
+/* Phone and tablet: one hitter at a time. */
+.ml { display: none; list-style: none; }
+.ml-h { border-top: 1px solid var(--line); padding-bottom: 14px; }
+.ml-head { display: grid; grid-template-columns: 30px 44px minmax(0, 1fr) 32px; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 10px 0 8px; text-align: left; color: inherit; }
+.ml-id { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ml-mix { font-size: var(--fs-13); color: var(--text-2); }
+.ml-mix b { font-family: var(--font-display); font-weight: 800; font-size: 22px; color: var(--text); }
+.ml-mix.none { color: var(--text-3); }
+.ml-find { font-size: var(--fs-13); color: var(--text-3); }
+.ml-caret { display: grid; place-items: center; width: 32px; height: 44px; color: var(--text-3); }
+.ml-caret svg { width: 18px; height: 18px; transition: transform var(--t-fast) var(--ease); }
+.ml-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 4px; padding-left: 86px; }
+.ml-chip { display: grid; min-width: 78px; padding: 6px 10px 7px; border-radius: var(--r-data); box-shadow: inset 0 0 0 1px var(--line); }
+.ml-chip i { display: flex; align-items: center; gap: 5px; font-style: normal; font-family: var(--font-display); font-weight: 700; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-2); }
+.ml-chip i::before { content: ""; width: 8px; height: 8px; border-radius: 1px; background: var(--tone); }
+.ml-chip b { margin-top: 2px; font-family: var(--font-display); font-weight: 800; font-size: 21px; line-height: 1; }
+.ml-chip small { font-size: var(--fs-12); color: var(--text-3); }
+.ml-chip.thin b { color: var(--text-3); font-weight: 700; }
+.ml-chip.none b { color: var(--text-disabled); }
+.ml-chip.e-pitcher { background: rgba(93, 33, 184, 0.3); box-shadow: none; }
+.ml-chip.e-pitcher.e-strong { background: rgba(93, 33, 184, 0.62); }
+.ml-chip.e-hitter { background: rgba(232, 237, 246, 0.08); }
+.ml-chip.e-hitter.e-strong { background: rgba(232, 237, 246, 0.17); }
+.ml-detail { margin-top: 12px; background: var(--ink-recess); }
+
+/* One hitter in depth. */
+.ins { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-areas: "pitch season" "pitch bvp"; gap: 22px 36px; padding: 18px 20px 22px 52px; animation: books-in 180ms var(--ease) both; }
+.ins-pitch { grid-area: pitch; }
+.ins-season { grid-area: season; }
+.ins-bvp { grid-area: bvp; }
+.ins h4 { margin-bottom: 8px; font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-2); }
+.ins h4 + * + h4, .ins .ins-kv + h4 { margin-top: 16px; }
+.ins-t { font-size: var(--fs-13); }
+.ins-t th, .ins-t td { padding: 6px 12px 6px 0; text-align: right; white-space: nowrap; }
+.ins-t .txt { text-align: left; }
+.ins-t thead th { font-weight: 600; color: var(--text-3); border-bottom: 1px solid var(--line); }
+.ins-t tbody th { font-weight: 600; color: var(--text); }
+.ins-t tr.thin { opacity: 0.55; }
+.ins .mu-note { margin-top: 8px; }
+.ins-kv { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.ins-kv div { display: flex; flex-direction: column; }
+.ins-kv dt { font-size: var(--fs-12); color: var(--text-3); }
+.ins-kv dd { font-size: var(--fs-15); color: var(--text); }
+/* Batter vs pitcher leads with its sample so a short history never reads as a rate. */
+.bvp-lead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-bottom: 10px; }
+.bvp-lead b { font-family: var(--font-display); font-weight: 800; font-size: 40px; line-height: 0.9; }
+.bvp-lead span { font-family: var(--font-display); font-weight: 700; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+.bvp-lead em { flex-basis: 100%; font-style: normal; font-size: var(--fs-13); color: var(--text-3); }
+.ins-bvp .ins-t { margin-top: 10px; }
+.ins-bvp-none { font-size: var(--fs-14); color: var(--text-3); }
+
+.mu-method { margin-top: 18px; max-width: 110ch; font-size: var(--fs-13); color: var(--text-3); }
+.mu-method details { margin-top: 6px; }
+.mu-method summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 600; color: var(--text-2); }
+.mu-method summary:hover { color: var(--text); }
+.mu-method details p { margin-top: 6px; }
+.mu-method details b { color: var(--text); font-weight: 600; }
+.mu-season { list-style: none; margin-top: 12px; }
+.mu-season li { display: flex; align-items: center; gap: 12px; min-height: 56px; border-top: 1px solid var(--line); }
+.mu-season .num { margin-left: auto; font-size: var(--fs-13); color: var(--text-2); }
+.mu-empty { padding: 40px 0; }
+.mu-sk { display: grid; gap: 14px; padding: 30px 0; }
+.mu-sk .skeleton:nth-child(1) { width: 60%; height: 64px; }
+.mu-sk .skeleton:nth-child(2) { height: 46px; }
+.mu-sk .skeleton:nth-child(3) { height: 280px; }
+
+@media (max-width: 1279px) {
+  .mu-p-name, .mu-o-abbr { font-size: 52px; }
+  .mu-sum-grid { grid-template-columns: minmax(0, 1fr); }
+  .ins { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "pitch pitch" "season bvp"; padding-left: 20px; }
+  .mx { --who-w: 240px; }
+}
+/* Under 1024 the matrix becomes one hitter at a time; nothing is dropped. */
+@media (max-width: 1023px) {
+  .mx-wrap { display: none; }
+  .ml { display: block; }
+  /* The pitcher across the top; "vs" and the lineup he faces on one line beneath. */
+  .mu-vs { grid-template-columns: auto minmax(0, 1fr); gap: 16px 14px; padding: 22px 0 28px; }
+  .mu-p { grid-column: 1 / -1; }
+  .mu-vs-word { align-self: start; font-size: 22px; padding-top: 10px; }
+  .mu-o { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-start; column-gap: 12px; text-align: left; }
+  .mu-o-abbr { font-size: 44px; }
+  .mu-o-name { flex: 1 1 calc(100% - 150px); margin-top: 0; }
+  .mu-lu { margin-top: 10px; }
+  .mu-lu-note { flex-basis: 100%; }
+  .ins { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pitch" "season" "bvp"; padding: 14px 14px 18px; }
+}
+@media (max-width: 767px) {
+  .matchups { padding-top: 20px; }
+  .matchups .h-page { font-size: 40px; }
+  .mu-head { margin-bottom: 14px; }
+  .mu-head .lede { display: none; }
+  .mu-head .date-field { flex: 1 1 100%; }
+  .mu-head .date-wrap input { width: 100%; }
+  .mu-g { min-width: 118px; padding: 8px 14px 10px; min-height: 68px; }
+  .mu-g-m { font-size: 21px; }
+  .mu-gamebar { margin-top: 22px; gap: 4px 12px; }
+  .mu-gb-teams { font-size: 28px; }
+  .mu-gb-when { font-size: 16px; }
+  .mu-sidesel { margin-left: 0; width: 100%; }
+  .mu-sidesel button { flex: 1; }
+  .mu-p { gap: 14px; align-items: flex-start; }
+  .mu-p .mu-p-face { --size: 56px !important; width: 56px; height: 56px; }
+  .mu-p-name { font-size: 36px; }
+  .mu-p-meta { margin-top: 6px; }
+  .mu-p-line { gap: 2px 12px; }
+  .mu-p-link { margin-top: 0; }
+  .mu-p-meta, .mu-o-name { font-size: 16px; }
+  .mu-o-abbr { font-size: 36px; }
+  .mu-sec-h h3 { font-size: 24px; }
+  .mu-band { height: 40px; }
+  .mu-finds li { font-size: 19px; }
+  .mu-rks { grid-template-columns: minmax(0, 1fr); }
+  .mx-key { gap: 6px 14px; }
+}
+@media (max-width: 560px) {
+  .ml-chips { padding-left: 0; }
+  .ml-head { grid-template-columns: 26px 44px minmax(0, 1fr) 32px; gap: 10px; }
+}

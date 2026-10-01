@@ -1,0 +1,1018 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-01T00:38:56.170Z",
+  "title": "Design System: PWR Props",
+  "extensions": {
+    "colorMeta": {
+      "ink-deep": {
+        "role": "neutral",
+        "displayName": "Stage",
+        "canonical": "#07040c",
+        "oklch": "oklch(11.9% 0.022 303.8)",
+        "tonalRamp": [
+          "#0d0913",
+          "#27222e",
+          "#443f4c",
+          "#645e6c",
+          "#857f8e",
+          "#a8a2b1",
+          "#ccc6d5",
+          "#f1ebfb"
+        ]
+      },
+      "ink-recess": {
+        "role": "neutral",
+        "displayName": "Recess",
+        "canonical": "#08040e",
+        "oklch": "oklch(12.2% 0.027 304.5)",
+        "tonalRamp": [
+          "#0e0814",
+          "#27212f",
+          "#433c4b",
+          "#615a6a",
+          "#847c8d",
+          "#a8a1b3",
+          "#cec7d9",
+          "#f2eafd"
+        ]
+      },
+      "ink-0": {
+        "role": "neutral",
+        "displayName": "Night",
+        "canonical": "#0b0612",
+        "oklch": "oklch(13.8% 0.028 303.4)",
+        "tonalRamp": [
+          "#0e0815",
+          "#27212f",
+          "#433c4c",
+          "#615a6b",
+          "#837c8e",
+          "#a8a1b3",
+          "#cec6da",
+          "#f2eafe"
+        ]
+      },
+      "ink-side": {
+        "role": "neutral",
+        "displayName": "Sidebar Ink",
+        "canonical": "#12071f",
+        "oklch": "oklch(16.1% 0.050 302.6)",
+        "tonalRamp": [
+          "#10051c",
+          "#291e38",
+          "#453956",
+          "#635775",
+          "#86799a",
+          "#aa9ebf",
+          "#d1c3e6",
+          "#f2eaff"
+        ]
+      },
+      "ink-1": {
+        "role": "neutral",
+        "displayName": "Panel Ink",
+        "canonical": "#140a22",
+        "oklch": "oklch(17.4% 0.049 300.6)",
+        "tonalRamp": [
+          "#0f051c",
+          "#281e38",
+          "#443a56",
+          "#625775",
+          "#857a99",
+          "#a99ebf",
+          "#cfc4e6",
+          "#f1ebfe"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Hover Ink",
+        "canonical": "#1b0f2e",
+        "oklch": "oklch(20.4% 0.060 298.8)",
+        "tonalRamp": [
+          "#0f0420",
+          "#281c3d",
+          "#44385b",
+          "#62567b",
+          "#8579a0",
+          "#a99dc6",
+          "#cfc3ed",
+          "#f0ebfe"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Control Ink",
+        "canonical": "#26143f",
+        "oklch": "oklch(24.2% 0.079 299.8)",
+        "tonalRamp": [
+          "#110026",
+          "#2a1944",
+          "#463563",
+          "#645384",
+          "#8776a9",
+          "#ac9acf",
+          "#d2bff7",
+          "#f1ebff"
+        ]
+      },
+      "purple-deep": {
+        "role": "secondary",
+        "displayName": "Logo Purple Deep",
+        "canonical": "#16032b",
+        "oklch": "oklch(17.0% 0.078 300.9)",
+        "tonalRamp": [
+          "#120026",
+          "#2b1943",
+          "#473562",
+          "#655383",
+          "#8875a8",
+          "#ad9ace",
+          "#d3bff6",
+          "#f1ebff"
+        ]
+      },
+      "purple-shadow": {
+        "role": "secondary",
+        "displayName": "Logo Purple Shadow",
+        "canonical": "#280a46",
+        "oklch": "oklch(23.6% 0.104 301.3)",
+        "tonalRamp": [
+          "#120026",
+          "#2e114d",
+          "#4a306d",
+          "#684e8e",
+          "#8b71b4",
+          "#b095db",
+          "#d5bdfe",
+          "#f1ebff"
+        ]
+      },
+      "purple": {
+        "role": "secondary",
+        "displayName": "Logo Purple",
+        "canonical": "#43186a",
+        "oklch": "oklch(32.3% 0.134 303.5)",
+        "tonalRamp": [
+          "#130025",
+          "#330157",
+          "#4f2678",
+          "#6e469b",
+          "#916ac1",
+          "#b68ee9",
+          "#d7bbff",
+          "#f2eaff"
+        ]
+      },
+      "ticket-plum": {
+        "role": "secondary",
+        "displayName": "Ticket Plum",
+        "canonical": "#2a0d4a",
+        "oklch": "oklch(24.6% 0.105 300.3)",
+        "tonalRamp": [
+          "#120028",
+          "#2e124f",
+          "#4c3271",
+          "#6b5294",
+          "#8c73b8",
+          "#af96dd",
+          "#d3bbfe",
+          "#f1ebfe"
+        ]
+      },
+      "violet": {
+        "role": "secondary",
+        "displayName": "Violet Light",
+        "canonical": "#5d21b8",
+        "oklch": "oklch(43.6% 0.213 293.2)",
+        "tonalRamp": [
+          "#0f0029",
+          "#2c0560",
+          "#4c159b",
+          "#6c37cb",
+          "#8c5ef3",
+          "#aa90fc",
+          "#cbc0fb",
+          "#efecff"
+        ]
+      },
+      "violet-edge": {
+        "role": "secondary",
+        "displayName": "Violet Edge",
+        "canonical": "rgba(185, 154, 240, 0.2)",
+        "oklch": "oklch(74.6% 0.125 300.0)",
+        "tonalRamp": [
+          "#120027",
+          "#300a57",
+          "#4d2d79",
+          "#6d4e9d",
+          "#8e6fc2",
+          "#b192e8",
+          "#d2bcfc",
+          "#f1ebfe"
+        ]
+      },
+      "purple-light": {
+        "role": "secondary",
+        "displayName": "Lilac",
+        "canonical": "#b99af0",
+        "oklch": "oklch(74.6% 0.125 300.0)",
+        "tonalRamp": [
+          "#120027",
+          "#2f0856",
+          "#4b2b77",
+          "#694a99",
+          "#8c6dbf",
+          "#b192e7",
+          "#d3bdff",
+          "#f1ebfe"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "rgba(232, 237, 246, 0.08)",
+        "oklch": "oklch(94.5% 0.013 262.4)",
+        "tonalRamp": [
+          "#080b11",
+          "#22252c",
+          "#3e4249",
+          "#5d6169",
+          "#7e828b",
+          "#a1a5ae",
+          "#c4c9d2",
+          "#eaeff8"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Hairline Strong",
+        "canonical": "rgba(232, 237, 246, 0.15)",
+        "oklch": "oklch(94.5% 0.013 262.4)",
+        "tonalRamp": [
+          "#080b11",
+          "#22252c",
+          "#3e4249",
+          "#5d6169",
+          "#7e828b",
+          "#a1a5ae",
+          "#c4c9d2",
+          "#eaeff8"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Chrome",
+        "canonical": "#e8edf6",
+        "oklch": "oklch(94.5% 0.013 262.4)",
+        "tonalRamp": [
+          "#080b11",
+          "#21242b",
+          "#3c4047",
+          "#5a5e65",
+          "#7c8088",
+          "#a0a5ad",
+          "#c6cbd3",
+          "#eaeff8"
+        ]
+      },
+      "text-2": {
+        "role": "neutral",
+        "displayName": "Chrome 2",
+        "canonical": "#aab3c7",
+        "oklch": "oklch(76.6% 0.030 266.3)",
+        "tonalRamp": [
+          "#060b18",
+          "#1d2433",
+          "#384050",
+          "#565e6f",
+          "#788093",
+          "#9ca5b8",
+          "#c1cbdf",
+          "#e7effe"
+        ]
+      },
+      "text-3": {
+        "role": "neutral",
+        "displayName": "Chrome 3",
+        "canonical": "#8f98ae",
+        "oklch": "oklch(68.0% 0.034 267.8)",
+        "tonalRamp": [
+          "#060a19",
+          "#1d2335",
+          "#383f52",
+          "#555d71",
+          "#778095",
+          "#9ba4bb",
+          "#c1cae2",
+          "#e8eefe"
+        ]
+      },
+      "text-disabled": {
+        "role": "neutral",
+        "displayName": "Disabled",
+        "canonical": "#5d6478",
+        "oklch": "oklch(50.5% 0.033 270.0)",
+        "tonalRamp": [
+          "#060a19",
+          "#1e2334",
+          "#393f52",
+          "#565d71",
+          "#788095",
+          "#9ca4ba",
+          "#c2cae1",
+          "#e8eeff"
+        ]
+      },
+      "gold": {
+        "role": "primary",
+        "displayName": "Rationed Gold",
+        "canonical": "#d9a441",
+        "oklch": "oklch(75.1% 0.130 79.8)",
+        "tonalRamp": [
+          "#120900",
+          "#312000",
+          "#543a02",
+          "#7b5600",
+          "#a67603",
+          "#cf9a36",
+          "#f7c160",
+          "#ffeccd"
+        ]
+      },
+      "gold-strong": {
+        "role": "primary",
+        "displayName": "Gold Strong",
+        "canonical": "#eabb57",
+        "oklch": "oklch(81.5% 0.129 83.9)",
+        "tonalRamp": [
+          "#110a00",
+          "#302100",
+          "#523c02",
+          "#775804",
+          "#a37801",
+          "#cb9d35",
+          "#f2c35f",
+          "#ffecc8"
+        ]
+      },
+      "gold-ink": {
+        "role": "primary",
+        "displayName": "Gold Ink",
+        "canonical": "#1a1408",
+        "oklch": "oklch(19.5% 0.024 84.0)",
+        "tonalRamp": [
+          "#100a02",
+          "#2a2317",
+          "#463f31",
+          "#645d4f",
+          "#877f70",
+          "#aca494",
+          "#d2cab9",
+          "#f6eedd"
+        ]
+      },
+      "gold-wash": {
+        "role": "primary",
+        "displayName": "Gold Wash",
+        "canonical": "rgba(217, 164, 65, 0.12)",
+        "oklch": "oklch(75.1% 0.130 79.8)",
+        "tonalRamp": [
+          "#130900",
+          "#332100",
+          "#573d03",
+          "#7d5a13",
+          "#a7791c",
+          "#cf9b36",
+          "#f5bf5f",
+          "#ffeccd"
+        ]
+      },
+      "gold-line": {
+        "role": "primary",
+        "displayName": "Gold Line",
+        "canonical": "rgba(217, 164, 65, 0.45)",
+        "oklch": "oklch(75.1% 0.130 79.8)",
+        "tonalRamp": [
+          "#130900",
+          "#332100",
+          "#573d03",
+          "#7d5a13",
+          "#a7791c",
+          "#cf9b36",
+          "#f5bf5f",
+          "#ffeccd"
+        ]
+      },
+      "hit": {
+        "role": "tertiary",
+        "displayName": "Went-Over Green",
+        "canonical": "#5cc27a",
+        "oklch": "oklch(73.5% 0.142 151.1)",
+        "tonalRamp": [
+          "#001004",
+          "#002d11",
+          "#034e23",
+          "#037135",
+          "#2c9752",
+          "#57bd76",
+          "#7fe59a",
+          "#c7ffd3"
+        ]
+      },
+      "miss": {
+        "role": "tertiary",
+        "displayName": "Did-Not Wine",
+        "canonical": "#a44a5a",
+        "oklch": "oklch(52.8% 0.120 11.0)",
+        "tonalRamp": [
+          "#1e0006",
+          "#490017",
+          "#711b30",
+          "#943c4d",
+          "#bc5f6e",
+          "#e58492",
+          "#ffb3bc",
+          "#fee8ea"
+        ]
+      },
+      "pos": {
+        "role": "tertiary",
+        "displayName": "Positive Text",
+        "canonical": "#5cc27a",
+        "oklch": "oklch(73.5% 0.142 151.1)",
+        "tonalRamp": [
+          "#001003",
+          "#032e13",
+          "#0e4f27",
+          "#0d7539",
+          "#2f9954",
+          "#58be76",
+          "#7ee399",
+          "#cafed5"
+        ]
+      },
+      "neg": {
+        "role": "tertiary",
+        "displayName": "Soft Red",
+        "canonical": "#e8848c",
+        "oklch": "oklch(72.3% 0.123 15.5)",
+        "tonalRamp": [
+          "#1e0004",
+          "#4a0113",
+          "#721929",
+          "#963b46",
+          "#be5e68",
+          "#e7838b",
+          "#feb4b8",
+          "#ffe8e9"
+        ]
+      },
+      "hit-wash": {
+        "role": "tertiary",
+        "displayName": "Hit Wash",
+        "canonical": "rgba(92, 194, 122, 0.12)",
+        "oklch": "oklch(73.5% 0.142 151.1)",
+        "tonalRamp": [
+          "#001003",
+          "#032e13",
+          "#0e4f27",
+          "#0d7539",
+          "#2f9954",
+          "#58be76",
+          "#7ee399",
+          "#cafed5"
+        ]
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Caution Amber",
+        "canonical": "#e3a857",
+        "oklch": "oklch(77.1% 0.120 73.0)",
+        "tonalRamp": [
+          "#130900",
+          "#341f01",
+          "#583801",
+          "#805300",
+          "#ab7318",
+          "#d29846",
+          "#fabe6d",
+          "#ffebd3"
+        ]
+      },
+      "no-line": {
+        "role": "tertiary",
+        "displayName": "No-Line Slate",
+        "canonical": "#7d86a3",
+        "oklch": "oklch(62.3% 0.045 271.5)",
+        "tonalRamp": [
+          "#05091e",
+          "#1c223a",
+          "#373e58",
+          "#545c78",
+          "#767f9c",
+          "#9aa4c2",
+          "#c0cae9",
+          "#e9eeff"
+        ]
+      },
+      "chrome-bar": {
+        "role": "neutral",
+        "displayName": "Chart Chrome",
+        "canonical": "#b9c2d6",
+        "oklch": "oklch(81.3% 0.030 266.3)",
+        "tonalRamp": [
+          "#060b18",
+          "#1d2433",
+          "#384050",
+          "#565e6f",
+          "#788093",
+          "#9ca5b8",
+          "#c1cbdf",
+          "#e8effe"
+        ]
+      },
+      "chrome-bar-low": {
+        "role": "neutral",
+        "displayName": "Chart Chrome Low",
+        "canonical": "#6f7891",
+        "oklch": "oklch(57.4% 0.040 269.6)",
+        "tonalRamp": [
+          "#050a1c",
+          "#1c2338",
+          "#373f55",
+          "#545d75",
+          "#768099",
+          "#9aa4bf",
+          "#c0cae6",
+          "#e8eefe"
+        ]
+      },
+      "pitch-tone-1": {
+        "role": "secondary",
+        "displayName": "Pitch Tone 1",
+        "canonical": "#e8edf6",
+        "oklch": "oklch(94.5% 0.013 262.4)",
+        "tonalRamp": [
+          "#080b11",
+          "#22252c",
+          "#3e4249",
+          "#5d6169",
+          "#7e828b",
+          "#a1a5ae",
+          "#c4c9d2",
+          "#eaeff8"
+        ]
+      },
+      "pitch-tone-2": {
+        "role": "secondary",
+        "displayName": "Pitch Tone 2",
+        "canonical": "#b99af0",
+        "oklch": "oklch(74.6% 0.125 300.0)",
+        "tonalRamp": [
+          "#120027",
+          "#300a57",
+          "#4d2d79",
+          "#6d4e9d",
+          "#8e6fc2",
+          "#b192e8",
+          "#d2bcfc",
+          "#f1ebfe"
+        ]
+      },
+      "pitch-tone-3": {
+        "role": "secondary",
+        "displayName": "Pitch Tone 3",
+        "canonical": "#7f5cc9",
+        "oklch": "oklch(56.3% 0.163 295.5)",
+        "tonalRamp": [
+          "#10002a",
+          "#2f0062",
+          "#4c238d",
+          "#6b47b2",
+          "#8c69d8",
+          "#ae8dff",
+          "#cdbefc",
+          "#efecfe"
+        ]
+      },
+      "pitch-tone-4": {
+        "role": "secondary",
+        "displayName": "Pitch Tone 4",
+        "canonical": "#5a3a9c",
+        "oklch": "oklch(43.9% 0.152 294.3)",
+        "tonalRamp": [
+          "#10002c",
+          "#2d065f",
+          "#4a2789",
+          "#694aad",
+          "#896cd3",
+          "#ac90fa",
+          "#ccbefe",
+          "#efecfe"
+        ]
+      },
+      "pitch-tone-5": {
+        "role": "secondary",
+        "displayName": "Pitch Tone 5",
+        "canonical": "#3f2872",
+        "oklch": "oklch(34.8% 0.122 293.4)",
+        "tonalRamp": [
+          "#10002c",
+          "#2b0f59",
+          "#47317b",
+          "#65519f",
+          "#8673c4",
+          "#a996ea",
+          "#cbbffe",
+          "#efecfe"
+        ]
+      },
+      "pitch-tone-6": {
+        "role": "secondary",
+        "displayName": "Pitch Tone 6",
+        "canonical": "#2d1c52",
+        "oklch": "oklch(28.1% 0.094 294.0)",
+        "tonalRamp": [
+          "#0f002a",
+          "#29184d",
+          "#45366f",
+          "#645691",
+          "#8577b5",
+          "#a89adb",
+          "#ccbffc",
+          "#efecfe"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "name-hero": {
+        "displayName": "Name hero",
+        "purpose": "The surname on Player Detail, fitted to its space (56 to 156px). The loudest word in the product."
+      },
+      "line-hero": {
+        "displayName": "Line hero",
+        "purpose": "The prop line on the ticket, in gold."
+      },
+      "result-hero": {
+        "displayName": "Result hero",
+        "purpose": "The sample hit rate; green when good, soft red when bad. The W-L record sits beside it at 60px."
+      },
+      "page-title": {
+        "displayName": "Page title",
+        "purpose": "Home's slate name in capitals; 46px on phones."
+      },
+      "board-title": {
+        "displayName": "Board title",
+        "purpose": "\"Pitcher props\" on the Board; 44px on phones."
+      },
+      "chapter-title": {
+        "displayName": "Chapter title",
+        "purpose": "Player Detail report chapters."
+      },
+      "slate-clock": {
+        "displayName": "Slate clock",
+        "purpose": "Home's start time, with AM/PM at 16px."
+      },
+      "slate-teams": {
+        "displayName": "Slate teams",
+        "purpose": "The matchup on a Home game row."
+      },
+      "game-band": {
+        "displayName": "Game band",
+        "purpose": "The matchup that opens a Board game."
+      },
+      "line-figure": {
+        "displayName": "Line figure",
+        "purpose": "The line on each Board prop row."
+      },
+      "pitcher-name": {
+        "displayName": "Pitcher name",
+        "purpose": "Starter and pitcher names on Home and the Board; 20px in the sticky pitcher strip."
+      },
+      "finding": {
+        "displayName": "Finding",
+        "purpose": "The one computed sentence that opens each report chapter."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Kickers, sample labels, result captions, game status, O/U side letters."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "UI copy and ledes, max 62ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Metadata, column headers, legends, sentence case."
+      },
+      "odds": {
+        "displayName": "Odds",
+        "purpose": "Prices: 20px on the Board, 26px on the ticket, 14px on Home."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "Counts, stat tables and axis values, tabular."
+      }
+    },
+    "shadows": [
+      {
+        "name": "float",
+        "value": "0 18px 48px rgba(4, 1, 10, 0.6)",
+        "purpose": "Popovers and menus only."
+      },
+      {
+        "name": "cutout",
+        "value": "drop-shadow(0 18px 40px rgba(0, 0, 0, 0.45))",
+        "purpose": "The athlete cutout over his action photo on Player Detail (a filter, not a box-shadow)."
+      },
+      {
+        "name": "scrim",
+        "value": "rgba(5, 2, 10, 0.64)",
+        "purpose": "Backdrop behind the phone filter sheet."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "The single product curve for all state changes."
+      },
+      {
+        "name": "t-fast",
+        "value": "140ms",
+        "purpose": "Hover, press, color, border and Strike blade changes."
+      },
+      {
+        "name": "t-med",
+        "value": "220ms",
+        "purpose": "Sheets, scrims, chart labels."
+      },
+      {
+        "name": "t-slow",
+        "value": "420ms",
+        "purpose": "The chart's sample window and bracket moving."
+      },
+      {
+        "name": "board-in",
+        "value": "260ms, rise 6px",
+        "purpose": "Board rows on first load, once."
+      },
+      {
+        "name": "board-refresh",
+        "value": "180ms",
+        "purpose": "Board rows dim briefly when filters change; opened book rows drop 4px into place."
+      },
+      {
+        "name": "photo-in",
+        "value": "400 to 600ms",
+        "purpose": "Portrait cutout and action photo fade in as they load."
+      },
+      {
+        "name": "route",
+        "value": "160ms",
+        "purpose": "View-transition crossfade between routes."
+      },
+      {
+        "name": "live-pulse",
+        "value": "1.8s",
+        "purpose": "The live game-status dot on Home."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.001ms",
+        "purpose": "All animation and transition durations collapse under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone-narrow",
+        "value": "400px"
+      },
+      {
+        "name": "board-compact",
+        "value": "560px"
+      },
+      {
+        "name": "phone",
+        "value": "767px"
+      },
+      {
+        "name": "board-recompose",
+        "value": "900px"
+      },
+      {
+        "name": "tablet",
+        "value": "1023px"
+      },
+      {
+        "name": "board-fold-prop-column",
+        "value": "1180px"
+      },
+      {
+        "name": "rail",
+        "value": "1279px"
+      },
+      {
+        "name": "detail-one-column",
+        "value": "1359px"
+      }
+    ],
+    "strike": {
+      "angle": "22deg",
+      "uses": [
+        "Player Detail portrait cut, with a 2px gold hairline on the cut",
+        "Sidebar active item blade",
+        "Report index current entry",
+        "Selected side on the ticket",
+        "Gold blade on the Home starter or Board row under pointer or focus"
+      ]
+    },
+    "touch": {
+      "minTarget": "44px",
+      "note": "Every segment, chip, token, button and switch under pointer: coarse; Board phone rows keep 44px links and expanders and 58px price cells."
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action per view: Open the board, Show lines.",
+      "html": "<button class=\"ds-btn-primary\">Open the board</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; min-height: 46px; padding: 0 18px; border: 0; border-radius: 2px; background: var(--gold, #d9a441); color: var(--gold-ink, #1a1408); font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-btn-primary:hover { background: var(--gold-strong, #eabb57); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: 2px solid var(--gold, #d9a441); outline-offset: 2px; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary actions; the border and text turn gold on hover.",
+      "html": "<button class=\"ds-btn-quiet\">Games, teams, pitchers</button>",
+      "css": ".ds-btn-quiet { min-height: 40px; padding: 0 14px; border: 1px solid var(--line-strong, rgba(232,237,246,0.15)); border-radius: 2px; background: transparent; color: var(--text, #e8edf6); font: 600 14px Inter, system-ui, sans-serif; cursor: pointer; transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1), color 140ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-btn-quiet:hover { border-color: var(--gold-line, rgba(217,164,65,0.45)); color: var(--gold-strong, #eabb57); } .ds-btn-quiet:focus-visible { outline: 2px solid var(--gold, #d9a441); outline-offset: 2px; }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "refersTo": "segment",
+      "description": "Both / Over / Under: a recessed tray, the selection lit with a straight gold underline.",
+      "html": "<div class=\"ds-seg\" role=\"radiogroup\"><button aria-checked=\"true\">Both</button><button aria-checked=\"false\">Over</button><button aria-checked=\"false\">Under</button></div>",
+      "css": ".ds-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line, rgba(232,237,246,0.08)); border-radius: 2px; background: var(--ink-recess, #08040e); } .ds-seg button { position: relative; min-height: 34px; padding: 0 12px; border: 0; border-radius: 2px; background: none; color: var(--text-2, #aab3c7); font: 500 14px Inter, system-ui, sans-serif; cursor: pointer; } .ds-seg button:hover { color: var(--text, #e8edf6); background: var(--ink-2, #1b0f2e); } .ds-seg button[aria-checked=\"true\"] { background: var(--ink-3, #26143f); color: var(--text, #e8edf6); font-weight: 600; } .ds-seg button[aria-checked=\"true\"]::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px; background: var(--gold, #d9a441); } .ds-seg button:focus-visible { outline: 2px solid var(--gold, #d9a441); outline-offset: 2px; }"
+    },
+    {
+      "name": "Prop Chip",
+      "kind": "chip",
+      "refersTo": "prop-chip",
+      "description": "Board prop filter. Pressed: chrome fill with a gold underline.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip\" aria-pressed=\"true\">Strikeouts<span>5</span></button><button class=\"ds-chip\" aria-pressed=\"false\">Hits allowed<span>5</span></button></div>",
+      "css": ".ds-chips { display: flex; gap: 6px; } .ds-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: 1px solid var(--line-strong, rgba(232,237,246,0.15)); border-radius: 2px; background: none; color: var(--text-2, #aab3c7); font: 500 14px Inter, system-ui, sans-serif; cursor: pointer; } .ds-chip span { font: 400 12px 'IBM Plex Mono', monospace; color: var(--text-3, #8f98ae); } .ds-chip:hover { color: var(--text, #e8edf6); border-color: var(--text-3, #8f98ae); } .ds-chip[aria-pressed=\"true\"] { background: rgba(232,237,246,0.08); border-color: rgba(232,237,246,0.28); color: var(--text, #e8edf6); box-shadow: inset 0 -2px 0 var(--gold, #d9a441); } .ds-chip:focus-visible { outline: 2px solid var(--gold, #d9a441); outline-offset: 2px; }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "search-input",
+      "description": "Recessed search with a leading icon.",
+      "html": "<label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m20 20-3.5-3.5\"/></svg><input placeholder=\"Find a pitcher or team\"></label>",
+      "css": ".ds-search { position: relative; display: flex; align-items: center; min-height: 40px; width: 280px; border: 1px solid var(--line-strong, rgba(232,237,246,0.15)); border-radius: 2px; background: var(--ink-recess, #08040e); color: var(--text-3, #8f98ae); transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-search svg { position: absolute; left: 12px; } .ds-search input { flex: 1; min-height: 38px; padding: 0 12px 0 38px; border: 0; background: none; color: var(--text, #e8edf6); font: 400 15px Inter, system-ui, sans-serif; outline: none; } .ds-search:focus-within { border-color: var(--gold-line, rgba(217,164,65,0.45)); }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "The current page takes a chrome wash and the gold Strike blade.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item\" aria-current=\"page\" href=\"#\">Pitcher props<span>49</span></a><a class=\"ds-nav-item\" href=\"#\">Lineup matchups</a></nav>",
+      "css": ".ds-nav { display: grid; gap: 2px; width: 220px; padding-left: 12px; } .ds-nav-item { position: relative; display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0 10px; border-radius: 2px; color: var(--text-2, #aab3c7); font: 500 15px Inter, system-ui, sans-serif; text-decoration: none; transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-nav-item span { font: 400 12px 'IBM Plex Mono', monospace; color: var(--text-3, #8f98ae); } .ds-nav-item:hover { background: rgba(232,237,246,0.05); color: var(--text, #e8edf6); } .ds-nav-item[aria-current=\"page\"] { background: rgba(232,237,246,0.07); color: var(--text, #e8edf6); font-weight: 600; } .ds-nav-item[aria-current=\"page\"]::before { content: ''; position: absolute; left: -9px; top: 8px; bottom: 8px; width: 4px; background: var(--gold, #d9a441); transform: skewX(-22deg); } .ds-nav-item:focus-visible { outline: 2px solid var(--gold, #d9a441); outline-offset: 2px; }"
+    },
+    {
+      "name": "Chapter Opening",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "The shared page turn: a hard rule with a 56 by 5px chrome tab, then the title. Opens report chapters, Home days and Board game bands.",
+      "html": "<div class=\"ds-chapter\"><span class=\"ds-teams\">PHI<i>@</i>ATL</span><span class=\"ds-when\">Tomorrow 2:00 PM</span><span class=\"ds-venue\">Truist Park</span></div>",
+      "css": ".ds-chapter { position: relative; display: flex; align-items: baseline; gap: 16px; padding-top: 16px; width: 640px; } .ds-chapter::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--line-strong, rgba(232,237,246,0.15)); } .ds-chapter::after { content: ''; position: absolute; left: 0; top: -2px; width: 56px; height: 5px; background: var(--text, #e8edf6); } .ds-teams { font: 800 32px/0.9 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: 0.03em; color: var(--text, #e8edf6); } .ds-teams i { margin: 0 9px; font-style: normal; font-size: 0.6em; color: var(--text-3, #8f98ae); } .ds-when { font: 700 18px 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-2, #aab3c7); } .ds-venue { font: 500 13px Inter, system-ui, sans-serif; color: var(--text-3, #8f98ae); }"
+    },
+    {
+      "name": "Board Prop Row",
+      "kind": "custom",
+      "refersTo": "price-cell",
+      "description": "Prop, the line as a figure, both prices (odds over book), the last-10 strip; the gold Strike blade marks the row you're on.",
+      "html": "<div class=\"ds-row\" tabindex=\"0\"><span class=\"ds-mk\">Strikeouts</span><b class=\"ds-ln\">7.5</b><a class=\"ds-px\" href=\"#\"><b>+102</b><small>FanDuel</small></a><a class=\"ds-px\" href=\"#\"><b>-126</b><small>DraftKings</small></a><span class=\"ds-strip\"><i class=\"h\"></i><i class=\"m\"></i><i class=\"h\"></i><i class=\"h\"></i><i class=\"x\"></i><i class=\"m\"></i><i class=\"h\"></i><i class=\"h\"></i><i class=\"m\"></i><i class=\"h\"></i></span><span class=\"ds-n\"><b>6</b>/9</span></div>",
+      "css": ".ds-row { position: relative; display: grid; grid-template-columns: 180px 80px 110px 110px auto auto; align-items: center; gap: 12px; padding: 6px 12px 6px 24px; color: var(--text, #e8edf6); outline: none; } .ds-row::before { content: ''; position: absolute; left: 6px; top: 10px; bottom: 10px; width: 3px; background: var(--gold, #d9a441); transform: skewX(-22deg); opacity: 0; transition: opacity 140ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-row:hover, .ds-row:focus-visible { background: rgba(232,237,246,0.035); } .ds-row:hover::before, .ds-row:focus-visible::before { opacity: 1; } .ds-mk { font: 600 15px Inter, system-ui, sans-serif; color: var(--text-2, #aab3c7); } .ds-ln { font: 800 30px/1 'Barlow Condensed', 'Arial Narrow', sans-serif; } .ds-px { display: inline-flex; flex-direction: column; align-items: flex-end; min-height: 48px; justify-content: center; padding: 4px 10px; border: 1px solid transparent; border-radius: 2px; color: inherit; text-decoration: none; } .ds-px:hover { border-color: var(--line-strong, rgba(232,237,246,0.15)); background: rgba(232,237,246,0.05); } .ds-px b { font: 600 20px 'IBM Plex Mono', monospace; letter-spacing: -0.02em; } .ds-px small { font: 400 12px Inter, system-ui, sans-serif; color: var(--text-3, #8f98ae); } .ds-strip { display: inline-flex; gap: 2px; } .ds-strip i { width: 9px; height: 22px; border-radius: 1px; } .ds-strip .h { background: var(--hit, #5cc27a); } .ds-strip .m { box-shadow: inset 0 0 0 1px var(--miss, #a44a5a); background: repeating-linear-gradient(135deg, transparent 0 2px, rgba(164,74,90,0.55) 2px 3px); } .ds-strip .x { box-shadow: inset 0 0 0 1px var(--text-disabled, #5d6478); } .ds-n { font: 700 16px 'Barlow Condensed', sans-serif; color: var(--text-3, #8f98ae); } .ds-n b { font-size: 22px; font-weight: 800; color: var(--text, #e8edf6); }"
+    },
+    {
+      "name": "Sticky Pitcher Strip",
+      "kind": "custom",
+      "refersTo": "sticky-pitcher",
+      "description": "Keeps the game and the pitcher in view through a long Board prop group; the next group pushes it up under the column header.",
+      "html": "<div class=\"ds-stick\"><span class=\"ds-game\">PHI @ ATL</span><span class=\"ds-who\"><span class=\"ds-face\">CS</span><span class=\"ds-name\">Chris Sale</span><span class=\"ds-team\">ATL</span></span></div>",
+      "css": ".ds-stick { display: flex; align-items: center; gap: 16px; height: 46px; width: 640px; padding-right: 12px; background: var(--ink-0, #0b0612); border-bottom: 1px solid var(--line-strong, rgba(232,237,246,0.15)); cursor: pointer; } .ds-game { font: 800 17px 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: 0.03em; color: var(--text-2, #aab3c7); } .ds-who { display: flex; align-items: center; gap: 10px; padding-left: 16px; border-left: 1px solid var(--line-strong, rgba(232,237,246,0.15)); } .ds-face { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--purple-shadow, #280a46); color: var(--purple-light, #b99af0); font: 700 12px 'Barlow Condensed', sans-serif; } .ds-name { font: 800 20px/1 'Barlow Condensed', 'Arial Narrow', sans-serif; text-transform: uppercase; color: var(--text, #e8edf6); transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-stick:hover .ds-name { color: var(--gold-strong, #eabb57); } .ds-team { font: 500 13px Inter, system-ui, sans-serif; color: var(--text-3, #8f98ae); }"
+    },
+    {
+      "name": "Game Status",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Home game status in its own voice: Final is chrome, in progress is lilac with a live dot, a delay reads at full strength. Never gold.",
+      "html": "<div class=\"ds-status-row\"><span class=\"ds-gs\">Final</span><span class=\"ds-gs live\">In Progress</span><span class=\"ds-gs alert\">Delayed</span></div>",
+      "css": ".ds-status-row { display: flex; gap: 24px; } .ds-gs { display: inline-flex; align-items: center; gap: 6px; font: 700 14px 'Barlow Condensed', 'Arial Narrow', sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3, #8f98ae); } .ds-gs.live { color: var(--purple-light, #b99af0); } .ds-gs.live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: ds-pulse 1.8s ease-in-out infinite; } .ds-gs.alert { color: var(--text, #e8edf6); } @keyframes ds-pulse { 50% { opacity: 0.35; } } @media (prefers-reduced-motion: reduce) { .ds-gs.live::before { animation: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "PWR Lab",
+    "overview": "PWR Props is one system across three surfaces with three jobs. Home is the slate: which games are coming, who starts, what the books have posted, where to begin. The Board is the market terminal: every posted line with its best prices and how the pitcher has done against it, built to be scanned. Player Detail is the scouting report: the athlete, the ticket, the result on its bracket, then chapters that each answer one question. The hierarchy between them is deliberate: slate and discovery, then the market, then the athlete.\n\nThe Lab language is open composition on a near-black purple ground. Sections open on a hard rule with a short chrome tab instead of sitting in panels. Names, matchups and the numbers that matter are set big in Barlow Condensed capitals; everything you operate is Inter; measured prices and stats are Plex Mono. Gold is rationed to the line, the selection, the primary action and the row you are on. The 22 degree Strike from the PWR bolt marks where you are and cuts the athlete's portrait, and nothing else.\n\nPhotography belongs to Player Detail, the one athlete-driven screen. Home and the Board are sports-first and data-first: real MLB headshots at list size, team abbreviations instead of logos, and no imagery added for atmosphere. Motion is product-speed state change on one curve.",
+    "keyCharacteristics": [
+      "Dark only: logo purples pushed to black as ground, chrome text in three steps, one rationed gold.",
+      "Open compositions: a hard rule plus a 56 by 5px chrome tab opens every chapter, day and game.",
+      "Barlow Condensed for names, matchups and headline figures; Inter for UI; Plex Mono for prices and measured stats.",
+      "Gold means the line, the selection, the primary action, or the row you're on. Utilities and statuses are never gold.",
+      "The 22 degree Strike on the portrait cut and on vertical \"you are here\" markers only.",
+      "Outcomes never by color alone: hits solid, misses hatched, missing values outlined or labeled, never shown as 0."
+    ],
+    "rules": [
+      {
+        "name": "The Rationed Gold Rule",
+        "body": "Gold is the line, the selection, the primary action and the row you're on. Utility actions (Clear all, retry, disclosure), game statuses, counts in chips and every data series are chrome.",
+        "section": "colors"
+      },
+      {
+        "name": "The Outcome Pair Rule",
+        "body": "Hit green and miss wine mean a real result against a real line. A miss always carries its hatch; a start with no line is slate; a missing value is outlined or labeled, never 0.",
+        "section": "colors"
+      },
+      {
+        "name": "The Purple Is Ground Rule",
+        "body": "Purple is surface and light, never body text on black. Lilac is the one readable purple, for initials and the live status.",
+        "section": "colors"
+      },
+      {
+        "name": "The Edge Pair Rule",
+        "body": "A hitter-against-pitch comparison is shaded violet for the pitcher's edge and chrome for the hitter's edge, never green and red, because neither side is \"good\". The shade is relative to MLB hitters on the same pitch, cells under the sample floor are never shaded, and the number is always printed.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Big Figure Rule",
+        "body": "Each view has one oversized figure that answers its question: the start time on Home, the line on the Board, the line and then the hit rate on Player Detail. Everything else steps down.",
+        "section": "typography"
+      },
+      {
+        "name": "The Measured Number Rule",
+        "body": "Plex Mono is for prices and measured stats. Headline figures (line, hit rate, record, clock, strip counts) are Barlow; clock times in running text use Inter tabular figures.",
+        "section": "typography"
+      },
+      {
+        "name": "The Recompose, Don't Drop Rule",
+        "body": "A phone gets the same research. Narrow layouts reorder and regrid; they never hide a number the decision needs.",
+        "section": "layout"
+      },
+      {
+        "name": "The Open Composition Rule",
+        "body": "Home, the Board and Player Detail do not put content in panels. A section is a hard rule with its chrome tab, a title and its content on the page. Boxes exist only for things you operate (inputs, segments, price cells) and for layers that float.",
+        "section": "layout"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Separation is a chrome hairline or a tonal step, never a shadow. A shadow means \"this floats\".",
+        "section": "elevation"
+      },
+      {
+        "name": "The Opaque Sticky Rule",
+        "body": "Every sticky layer (filter bar, column header, pitcher strip, phone bars) is fully opaque, so rows scrolling under it never show through. The Board table uses separate borders for the same reason.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Strike Rule",
+        "body": "22 degrees on the portrait cut and on vertical \"you are here\" markers only. Never on cards, buttons, tables or horizontal edges.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Square Data Rule",
+        "body": "2px for anything precise. Soft corners only on layers that float.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** open sections, days and games on the chapter rule (1px Hairline Strong plus the 56 by 5px chrome tab) instead of putting them in panels.",
+      "**Do** give each view one oversized Barlow figure: the start time, the line, the hit rate.",
+      "**Do** keep gold to the line, the selection, the primary action, the row you're on and focus.",
+      "**Do** set prices and measured stats in Plex Mono with tabular figures, and names and headline figures in Barlow Condensed capitals.",
+      "**Do** establish a pitcher once on the Board and keep him in view with the sticky pitcher strip.",
+      "**Do** encode a miss with the wine hatch and outline, show no-line starts in slate, and show a missing value as an outlined cell or a labeled gap.",
+      "**Do** give usage width and whiff length, never both on one axis.",
+      "**Do** use real MLB headshots and team abbreviations on Home and the Board, and keep photography for Player Detail.",
+      "**Do** keep every sticky layer opaque and every touch target at 44px.",
+      "**Do** print the sample under every matchup value, and leave values under 20 PA (50 pitches for Whiff%) unshaded and out of every derived figure.",
+      "**Do** weight only PA-based metrics (xBA, K%) by the pitcher's PA share; Whiff% is per swing and is never blended."
+    ],
+    "donts": [
+      "**Don't** make utility actions (Clear all, retry, disclosure) or game statuses gold or amber.",
+      "**Don't** add photography, team logos or atmosphere imagery to Home or the Board without a functional reason.",
+      "**Don't** use hit green or miss wine for anything that is not a real outcome or a better/worse comparison.",
+      "**Don't** apply the 22 degree Strike to cards, buttons, tables or horizontal edges.",
+      "**Don't** add KPI tiles, stat cards or fake summary widgets; one line of real facts replaces them.",
+      "**Don't** set purple as body text on the dark ground.",
+      "**Don't** use shadows to separate things that do not float.",
+      "**Don't** let a filter bar wrap into a third line; recompose it instead.",
+      "**Don't** set load-bearing text below 12px.",
+      "**Don't** present a ranked-by-PA list as a batting order, invent a projected lineup, or show batter handedness the data doesn't carry.",
+      "**Don't** turn matchup data into a single unexplained score; any blended figure shows its metric, sample, coverage and formula."
+    ]
+  }
+}

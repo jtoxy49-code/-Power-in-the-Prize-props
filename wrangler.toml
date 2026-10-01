@@ -13,6 +13,9 @@ crons = ["*/10 * * * *", "0 6,23 * * *"]
 [[kv_namespaces]]
 binding = "PROPS_DATA"
 id = "791e78dd86124d17873a367e48dd2a00"
+# Isolated, empty namespace used only by `wrangler dev --remote` / local
+# preview sessions, so dev traffic never reads or writes production KV.
+preview_id = "11a5de824a514523ad820e8df4626da7"
 
 # Not sensitive on their own — the Client ID is even publicly visible
 # in the OAuth login URL by design, and Guild ID / Role ID are just

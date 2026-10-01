@@ -6,6 +6,7 @@ import { buildMergedStats, normalizeName } from "./merge.js";
 import { fetchGameLog, getCachedGameLog } from "./gamelog.js";
 import { refreshArsenalStats } from "./pitch-arsenal.js";
 import { fetchLineupsForDate, getLineupsForDate } from "./lineups.js";
+import { validYmd } from "../public/assets/js/dates.js";
 import { refreshParkFactors } from "./park-factors.js";
 import { getParkFactors } from "./park-factors-static.js";
 import { getVenueCoords } from "./venue-coords.js";
@@ -15,14 +16,24 @@ import { estimateWeatherHrImpact } from "./weather-hr-model.js";
 import { refreshBatterExpectedStats } from "./batter-expected.js";
 import { refreshBatterSeasonStats } from "./batter-season.js";
 import { buildMergedBatterStats } from "./batter-merge.js";
-import { refreshBatterPitchTypeStats, getTeamPitchTypeSplits } from "./batter-pitch-types.js";
+import { refreshBatterPitchTypeStats, getTeamPitchTypeSplits, getBatterPitchTypes } from "./batter-pitch-types.js";
 import { getTeamId, getTeamAbbreviation } from "./team-ids.js";
 import { getSameHandedStartersVsTeam, fetchPitchHand } from "./same-handed.js";
 import { getCachedPitchMetrics } from "./pitch-metrics.js";
 import { getCachedTeamSplits } from "./team-plate-discipline.js";
 import { getCachedMatchup } from "./batter-vs-pitcher.js";
 import { getCachedPitcherSplits } from "./pitcher-splits.js";
-import { getDiscordAuthUrl, exchangeCodeForUser, hasPremiumRole, createSessionCookie, verifySessionCookie } from "./auth.js";
+import {
+  getDiscordAuthUrl,
+  exchangeCodeForUser,
+  hasPremiumRole,
+  createSessionCookie,
+  verifySessionCookie,
+  createOAuthState,
+  checkOAuthState,
+  clearOAuthStateCookie,
+  checkEntitlement,
+} from "./auth.js";
 
 function getLoginPageHtml() {
   return `<!DOCTYPE html>
@@ -117,8 +128,75 @@ p{
 </html>`;
 }
 
-export default {
-  async fetch(request, env, ctx) {
+// Small message pages (premium required, login expired, Discord unavailable)
+// share the original premium-required card.
+function getMessagePageHtml(title, text, href, linkText) {
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0A080F;color:#F4F1FA;font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.card{background:#131020;border:1px solid #2B2540;border-radius:16px;padding:40px 36px;max-width:400px;text-align:center;}
+h1{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;margin-bottom:14px;}
+p{font-size:13.5px;color:#A79FC0;line-height:1.55;margin-bottom:22px;}
+a{color:#F5B400;font-weight:600;text-decoration:none;font-size:13.5px;}
+a:hover{text-decoration:underline;}
+</style></head>
+<body>
+  <div class="card">
+    <h1>${title}</h1>
+    <p>${text}</p>
+    <a href="${href}">${linkText} &rarr;</a>
+  </div>
+</body></html>`;
+}
+
+const HTML_HEADERS = { "content-type": "text/html; charset=utf-8" };
+
+function getPremiumRequiredHtml() {
+  return getMessagePageHtml(
+    "Premium access required",
+    "PWR Props is exclusive to Power in the Prize premium members. If you believe this is a mistake, double check your role in Discord and try logging in again.",
+    "/login",
+    "Try logging in again"
+  );
+}
+
+// A valid session whose Premium entitlement fails: 403 when Discord says the
+// role is gone, 503 when Discord can't be asked and the grace window is over.
+function entitlementDenied(reason, url) {
+  const unavailable = reason === "entitlement_unavailable";
+  const status = unavailable ? 503 : 403;
+  if (url.pathname.startsWith("/api/")) {
+    const headers = { "content-type": "application/json; charset=utf-8" };
+    if (unavailable) headers["Retry-After"] = "60";
+    return new Response(JSON.stringify({ error: reason }), { status, headers });
+  }
+  const html = unavailable
+    ? getMessagePageHtml(
+        "Can't confirm Premium right now",
+        "Discord isn't answering, so PWR Props can't confirm your Premium role. You're still logged in; try again in a minute.",
+        "/",
+        "Try again"
+      )
+    : getPremiumRequiredHtml();
+  return new Response(html, { status, headers: HTML_HEADERS });
+}
+
+// Adds a Set-Cookie to any response, including ones with immutable headers.
+// A response carrying a session must never sit in a shared cache, whatever
+// the route asked for (e.g. /api/odds is "public, max-age=60").
+function withSetCookie(response, cookie) {
+  const copy = new Response(response.body, response);
+  copy.headers.append("Set-Cookie", cookie);
+  copy.headers.set("Cache-Control", "private, no-store");
+  return copy;
+}
+
+const app = {
+  // out.setCookie: a re-signed session the gate wants sent with this response.
+  async fetch(request, env, ctx, out = {}) {
     const url = new URL(request.url);
 
     // --- Debug route gate — every /debug/* route requires a secret
@@ -133,9 +211,14 @@ export default {
 
     // --- Discord OAuth login flow ---
     if (url.pathname === "/login") {
+      if (!env.SESSION_SECRET) return new Response("Login is not configured.", { status: 500 });
       const redirectUri = `${url.origin}/auth/callback`;
-      const authUrl = getDiscordAuthUrl(env.DISCORD_CLIENT_ID, redirectUri);
-      return Response.redirect(authUrl, 302);
+      const { state, cookie } = await createOAuthState(env.SESSION_SECRET);
+      const authUrl = getDiscordAuthUrl(env.DISCORD_CLIENT_ID, redirectUri, state);
+      return new Response(null, {
+        status: 302,
+        headers: { Location: authUrl, "Set-Cookie": cookie, "Cache-Control": "no-store" },
+      });
     }
 
     if (url.pathname === "/logout") {
@@ -151,9 +234,32 @@ export default {
     }
 
     if (url.pathname === "/auth/callback") {
+      // Every callback response clears the one-time state cookie.
+      const finish = (response) => {
+        response.headers.append("Set-Cookie", clearOAuthStateCookie);
+        return response;
+      };
+      if (!env.SESSION_SECRET) return finish(new Response("Login is not configured.", { status: 500 }));
+      // The state Discord returns must match the one /login stored in this
+      // browser (login CSRF). Checked before the code is ever used.
+      const stateCheck = await checkOAuthState(request.headers.get("Cookie"), url.searchParams.get("state"), env.SESSION_SECRET);
+      if (stateCheck !== "ok") {
+        console.warn(`Login callback refused: ${stateCheck} OAuth state`);
+        return finish(
+          new Response(
+            getMessagePageHtml(
+              "Login link expired",
+              "That Discord login didn't come from this browser's last login, or it took longer than 10 minutes. Start again to log in.",
+              "/login",
+              "Log in again"
+            ),
+            { status: 400, headers: HTML_HEADERS }
+          )
+        );
+      }
       const code = url.searchParams.get("code");
       if (!code) {
-        return new Response("Missing authorization code.", { status: 400 });
+        return finish(new Response("Missing authorization code.", { status: 400 }));
       }
       try {
         const redirectUri = `${url.origin}/auth/callback`;
@@ -161,37 +267,18 @@ export default {
         const isPremium = await hasPremiumRole(discordUser.id, env.DISCORD_GUILD_ID, env.DISCORD_PREMIUM_ROLE_ID, env.DISCORD_BOT_TOKEN);
 
         if (!isPremium) {
-          return new Response(
-            `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600&display=swap');
-*{box-sizing:border-box;margin:0;padding:0;}
-body{background:#0A080F;color:#F4F1FA;font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
-.card{background:#131020;border:1px solid #2B2540;border-radius:16px;padding:40px 36px;max-width:400px;text-align:center;}
-h1{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;margin-bottom:14px;}
-p{font-size:13.5px;color:#A79FC0;line-height:1.55;margin-bottom:22px;}
-a{color:#F5B400;font-weight:600;text-decoration:none;font-size:13.5px;}
-a:hover{text-decoration:underline;}
-</style></head>
-<body>
-  <div class="card">
-    <h1>Premium access required</h1>
-    <p>PWR Props is exclusive to Power in the Prize premium members. If you believe this is a mistake, double check your role in Discord and try logging in again.</p>
-    <a href="/login">Try logging in again &rarr;</a>
-  </div>
-</body></html>`,
-            { status: 403, headers: { "content-type": "text/html; charset=utf-8" } }
-          );
+          return finish(new Response(getPremiumRequiredHtml(), { status: 403, headers: HTML_HEADERS }));
         }
 
         const cookie = await createSessionCookie(discordUser.id, discordUser.username, discordUser.avatar, env.SESSION_SECRET);
-        return new Response(null, {
-          status: 302,
-          headers: { Location: "/", "Set-Cookie": cookie },
-        });
+        return finish(
+          new Response(null, {
+            status: 302,
+            headers: { Location: "/", "Set-Cookie": cookie },
+          })
+        );
       } catch (err) {
-        return new Response(`Login failed: ${err.message}`, { status: 500 });
+        return finish(new Response(`Login failed: ${err.message}`, { status: 500 }));
       }
     }
 
@@ -204,8 +291,9 @@ a:hover{text-decoration:underline;}
     // by the gate and served the login page's HTML instead of the
     // actual image.
     const LOGIN_PAGE_ASSETS = ["/pwr-logo.png"];
+    const ungated = url.pathname.startsWith("/debug/") || LOGIN_PAGE_ASSETS.includes(url.pathname);
     const session = await verifySessionCookie(request.headers.get("Cookie"), env.SESSION_SECRET);
-    if (!session && !url.pathname.startsWith("/debug/") && !LOGIN_PAGE_ASSETS.includes(url.pathname)) {
+    if (!session && !ungated) {
       if (url.pathname.startsWith("/api/")) {
         return new Response('{"error":"Not authenticated"}', {
           status: 401,
@@ -216,6 +304,15 @@ a:hover{text-decoration:underline;}
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8" },
       });
+    }
+
+    // --- Premium entitlement — a valid session also needs the Premium role
+    // right now. The answer rides in the signed session and is rechecked with
+    // Discord at most every ENTITLEMENT_TTL (see auth.js for the full rules).
+    if (session && !ungated) {
+      const entitlement = await checkEntitlement(session, env);
+      if (entitlement.cookie) out.setCookie = entitlement.cookie;
+      if (!entitlement.allow) return entitlementDenied(entitlement.reason, url);
     }
 
     if (url.pathname === "/api/me") {
@@ -319,6 +416,33 @@ a:hover{text-decoration:underline;}
       try {
         const splits = await getTeamPitchTypeSplits(env, team);
         return new Response(JSON.stringify({ team, splits }), {
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "public, max-age=300",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+    }
+
+    // Read-only: each requested hitter's season stats by pitch type, from the
+    // stored Savant leaderboard, plus an MLB benchmark per pitch type. Feeds
+    // the Lineup Matchups matrix; nothing is fetched or written.
+    if (url.pathname === "/api/batter-pitch-types") {
+      const ids = (url.searchParams.get("ids") || "").split(",").map((s) => s.trim()).filter((s) => /^\d{1,8}$/.test(s));
+      if (!ids.length || ids.length > 40) {
+        return new Response('{"error":"ids must be 1 to 40 comma-separated MLB player ids"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      try {
+        const data = await getBatterPitchTypes(env, ids);
+        return new Response(JSON.stringify(data), {
           headers: {
             "content-type": "application/json; charset=utf-8",
             "cache-control": "public, max-age=300",
@@ -590,7 +714,15 @@ a:hover{text-decoration:underline;}
     }
 
     if (url.pathname === "/api/lineups") {
-      const dateParam = url.searchParams.get("date"); // optional YYYY-MM-DD, defaults to today
+      const dateParam = url.searchParams.get("date"); // optional YYYY-MM-DD, defaults to today's baseball day
+      // The date goes into the MLB request and the KV cache key: only a real
+      // YYYY-MM-DD is accepted.
+      if (dateParam && !validYmd(dateParam)) {
+        return new Response('{"error":"date must be YYYY-MM-DD"}', {
+          status: 400,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
       try {
         const data = await getLineupsForDate(env, dateParam);
         return new Response(JSON.stringify(data), {
@@ -1080,5 +1212,16 @@ a:hover{text-decoration:underline;}
         })()
       );
     }
+  },
+};
+
+export default {
+  async fetch(request, env, ctx) {
+    const out = {};
+    const response = await app.fetch(request, env, ctx, out);
+    return out.setCookie ? withSetCookie(response, out.setCookie) : response;
+  },
+  async scheduled(event, env, ctx) {
+    return app.scheduled(event, env, ctx);
   },
 };

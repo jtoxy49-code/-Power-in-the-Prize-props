@@ -1,3 +1,5 @@
+import { statNum } from "./gamelog.js";
+
 const SAVANT_ARSENAL_BASE = "https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats";
 
 function parseCSVLine(line) {
@@ -55,25 +57,27 @@ export async function fetchPitchArsenal(year) {
  * Confirmed field mapping (verified against real 2026 data):
  * one row per pitcher per pitch type.
  */
-function cleanRow(raw) {
+// A blank cell is a stat Savant did not report (null); "0" is a real zero
+// and stays 0.
+export function cleanRow(raw) {
   return {
     player_id: raw["player_id"] || "",
     name: raw["last_name, first_name"] || "",
     pitch_type: raw["pitch_type"] || "",
     pitch_name: raw["pitch_name"] || "",
-    usage_pct: Number(raw["pitch_usage"]) || null,
-    pitches: Number(raw["pitches"]) || 0,
-    pa: Number(raw["pa"]) || 0,
-    ba: Number(raw["ba"]) || null,
-    est_ba: Number(raw["est_ba"]) || null,
-    slg: Number(raw["slg"]) || null,
-    est_slg: Number(raw["est_slg"]) || null,
-    woba: Number(raw["woba"]) || null,
-    est_woba: Number(raw["est_woba"]) || null,
-    whiff_pct: Number(raw["whiff_percent"]) || null,
-    k_pct: Number(raw["k_percent"]) || null,
-    put_away_pct: Number(raw["put_away"]) || null,
-    hard_hit_pct: Number(raw["hard_hit_percent"]) || null,
+    usage_pct: statNum(raw["pitch_usage"]),
+    pitches: statNum(raw["pitches"]) ?? 0,
+    pa: statNum(raw["pa"]) ?? 0,
+    ba: statNum(raw["ba"]),
+    est_ba: statNum(raw["est_ba"]),
+    slg: statNum(raw["slg"]),
+    est_slg: statNum(raw["est_slg"]),
+    woba: statNum(raw["woba"]),
+    est_woba: statNum(raw["est_woba"]),
+    whiff_pct: statNum(raw["whiff_percent"]),
+    k_pct: statNum(raw["k_percent"]),
+    put_away_pct: statNum(raw["put_away"]),
+    hard_hit_pct: statNum(raw["hard_hit_percent"]),
   };
 }
 

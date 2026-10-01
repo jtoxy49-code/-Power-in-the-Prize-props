@@ -1,3 +1,5 @@
+import { slateDate } from "../public/assets/js/dates.js";
+
 const MLB_STATS_BASE = "https://statsapi.mlb.com/api/v1";
 
 export async function fetchLineupsForDate(date) {
@@ -51,7 +53,8 @@ function cleanGame(g) {
  * post/confirm at any point during the day.
  */
 export async function getLineupsForDate(env, dateOverride) {
-  const date = dateOverride || new Date().toISOString().slice(0, 10);
+  // Today's baseball day (US Eastern, rolling over at 5 AM), shared with the frontend.
+  const date = dateOverride || slateDate(0);
   const cacheKey = `lineups:${date}`;
 
   const cached = await env.PROPS_DATA.get(cacheKey, "json");

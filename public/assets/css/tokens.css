@@ -1,0 +1,107 @@
+/*
+  PWR PRODUCT TOKENS
+  Derived from the PWR Hub brand (pwr-hub/src/app/globals.css), re-tuned for a
+  dense research product. Dark only: the brand is locked dark and members read
+  this in the evening before first pitch as often as on a phone at noon.
+
+  Rules carried over from the Hub:
+  - Gold is the single accent: primary action, current selection, the line.
+  - Purple is ground and depth (sampled from the logo), never text on black.
+  - Chrome (cool white) is the reading voice.
+  - IBM Plex Mono only for real measured numbers.
+  - Green / red only for a real outcome (hit, miss, better or worse than avg).
+*/
+:root {
+  color-scheme: dark;
+
+  /* Ground: logo purples (#16032b, #280a46, #43186a, #440b98) pushed toward black */
+  --ink-0: #0b0612;          /* app background */
+  --ink-1: #140a22;          /* raised panel */
+  --ink-2: #1b0f2e;          /* panel header, hovered row */
+  --ink-3: #26143f;          /* control fill, selected row */
+  --ink-recess: #08040e;     /* chart wells, inset regions */
+  --ink-side: #12071f;       /* sidebar, a second neutral layer */
+  --ink-deep: #07040c;       /* near-black: the stage under hero imagery and charts */
+  --purple-deep: #16032b;
+  --purple-shadow: #280a46;
+  --purple: #43186a;
+  --purple-vivid: #440b98;
+  --violet: #5d21b8;         /* lit edge and the selected chart window, never a fill for text */
+  --violet-edge: rgba(185, 154, 240, 0.2);
+  --purple-light: #b99af0;   /* selected-state text on purple, 8:1 on ink-1 */
+
+  /* Lines: chrome at low alpha, never shadows for separation */
+  --line: rgba(232, 237, 246, 0.08);
+  --line-strong: rgba(232, 237, 246, 0.15);
+  --edge-lit: rgba(232, 237, 246, 0.10); /* 1px lit top edge on raised panels */
+
+  /* Text: chrome voice. Contrast measured on --ink-1 */
+  --text: #e8edf6;           /* 16.3:1 */
+  --text-2: #aab3c7;         /*  9.1:1 */
+  --text-3: #8f98ae;         /*  6.6:1 */
+  --text-disabled: #5d6478;
+
+  /* Accent */
+  --gold: #d9a441;           /* 8.5:1 */
+  --gold-strong: #eabb57;
+  --gold-ink: #1a1408;       /* text on gold, 8.1:1 */
+  --gold-wash: rgba(217, 164, 65, 0.12);
+  --gold-line: rgba(217, 164, 65, 0.45);
+
+  /* Outcome and comparison. Validated with the dataviz CVD script:
+     hit #5cc27a vs miss #a44a5a = deutan dE 20.2 on the chart surface.
+     Misses also carry a hatch, so outcome is never color alone. */
+  --hit: #5cc27a;
+  --miss: #a44a5a;
+  --pos: #5cc27a;            /* text, 8.6:1 */
+  --neg: #e8848c;            /* text, 7.4:1 */
+  --hit-wash: rgba(92, 194, 122, 0.12);
+  --neg-wash: rgba(232, 132, 140, 0.12);
+  --warn: #e3a857;
+
+  /* Type */
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  /* Fixed rem scale, ratio ~1.15. Nothing load-bearing below 12px. */
+  --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;
+  --fs-14: 0.875rem;
+  --fs-15: 0.9375rem;
+  --fs-17: 1.0625rem;
+  --fs-20: 1.25rem;
+  --fs-24: 1.5rem;
+  --fs-30: 1.875rem;
+  --fs-40: 2.5rem;
+  --fs-52: 3.25rem;
+
+  /* Space: 4px base */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px;
+  --s6: 24px; --s7: 32px; --s8: 40px; --s9: 48px;
+
+  /* Shape: near-square is the house shape for data and controls (Hub
+     --radius-data), soft corners only on top-level panels. */
+  --r-data: 2px;
+  --r-panel: 10px;
+
+  /* The Strike: one canonical angle, measured from the bolt (Hub). */
+  --strike: 22deg;
+
+  /* Motion: product speeds, one curve */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-fast: 140ms;
+  --t-med: 220ms;
+  --t-slow: 420ms;           /* the sample window moving on the chart */
+
+  /* Layers */
+  --z-sticky: 20;
+  --z-shell: 30;
+  --z-pop: 40;
+  --z-sheet: 50;
+
+  --sidebar-w: 236px;
+  --sidebar-rail: 68px;
+  --topbar-h: 56px;
+  --bottomnav-h: 64px;
+}
