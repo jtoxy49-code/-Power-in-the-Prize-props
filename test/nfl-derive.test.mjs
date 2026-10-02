@@ -6,6 +6,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { loadSource, derive } from "./fixtures/nfl/load.mjs";
+import { archivePlan } from "../etl/nfl/build.mjs";
+import { buildPayloads as payloadsOf } from "../etl/nfl/payloads.mjs";
 import { deriveAll } from "../etl/nfl/build.mjs";
 import { defenseAsOf, usageAsOf, tendenciesAsOf, easternToUtc, positionGroup, currentWeek } from "../etl/nfl/derive.mjs";
 import { DEFENSE_METRICS, rankMetric } from "../src/nfl/metrics.js";
@@ -275,6 +277,23 @@ test("a broken dataset fails its checks, and a failed check is what stops publis
   const build = readFileSync(new URL("../etl/nfl/build.mjs", import.meta.url), "utf8");
   assert.ok(build.indexOf("BUILD STOPPED") < build.indexOf("publishD1(join(outDir"), "the check gate comes before any publish call");
   assert.ok(build.indexOf("BUILD STOPPED") < build.indexOf("publishR2(files"), "and before the archive");
+});
+
+test("a publish to the account includes the source archive, or says in so many words that the archive is pending", () => {
+  assert.deepEqual(archivePlan(["r2", "d1", "kv"]), { toAccount: true, refuse: false, pending: false });
+  assert.deepEqual(archivePlan(["d1", "kv"]), { toAccount: true, refuse: true, pending: false }, "leaving r2 out is refused");
+  assert.deepEqual(archivePlan(["kv"]), { toAccount: true, refuse: true, pending: false });
+  assert.deepEqual(archivePlan(["d1"]), { toAccount: true, refuse: true, pending: false });
+  assert.deepEqual(archivePlan(["d1", "kv"], { archivePending: true }), { toAccount: true, refuse: false, pending: true }, "unless it is declared pending");
+  assert.deepEqual(archivePlan(["kv"], { kvLocal: true }), { toAccount: false, refuse: false, pending: false }, "a local rehearsal publishes nothing to the account");
+  assert.deepEqual(archivePlan([]), { toAccount: false, refuse: false, pending: false });
+  // the build stamp says which it was
+  assert.deepEqual(payloadsOf(derived)["nfl:meta"].archive, { status: "not_published" });
+  assert.deepEqual(payloadsOf({ ...derived, archive: { status: "pending", files: 7 } })["nfl:meta"].archive, { status: "pending", files: 7 });
+  const workflow = readFileSync(new URL("../.github/workflows/nfl-builder.yml", import.meta.url), "utf8");
+  assert.ok(!/^s*push:/m.test(workflow), "the workflow has no push trigger");
+  assert.match(workflow, /vars.NFL_SCHEDULED_PUBLISH == 'true' && 'r2,d1,kv' || 'none'/, "a scheduled run publishes nothing until the repository variable is set, and then always with the archive");
+  assert.match(workflow, /default: "none"/, "a manual run publishes nothing unless told what to publish");
 });
 
 // How those payloads reach KV, and what a failed publish leaves readers with, is in nfl-publish.test.mjs.

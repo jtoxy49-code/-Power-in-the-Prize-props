@@ -8,6 +8,7 @@ node_modules/
 # NFL builder: download cache and build output (never committed)
 etl/nfl/.cache/
 etl/nfl/out/
+etl/nfl/archive-pending/
 
 # The raw odds capture from the read-only probe is the provider's data. It is
 # used by one local-only test and is never committed.

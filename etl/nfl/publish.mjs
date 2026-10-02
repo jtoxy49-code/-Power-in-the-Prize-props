@@ -66,9 +66,24 @@ export function wranglerKv({ local = false, dir = tmpdir() } = {}) {
 }
 
 // How long a finished build sits in KV before readers are pointed at it. KV
-// documents up to 60 seconds for a write to be visible everywhere; the pointer
-// moves after that, so a payload is readable wherever the pointer is.
+// documents up to 60 seconds for a write to be visible everywhere, and gives
+// no hard bound. The wait makes it unlikely that an edge sees the pointer
+// before a payload; it does not prove it. What covers the rest is the reader:
+// a payload it cannot read sends the whole request to the previous build.
 export const KV_SETTLE_MS = 75_000;
+
+// How long a build's keys stay in KV after it stops being the current build.
+// KV edge caches are measured in seconds to minutes; this is two days. A build
+// the pointer does not list (a failed publish, or one overwritten by a
+// concurrent publisher) is kept until it is this old, counted from the time in
+// its build id, so one publisher never deletes what another is still writing.
+export const BUILD_RETENTION_MS = 48 * 3600_000;
+
+/** The time a build id carries ("2026-20261002T082000Z"), in ms, or NaN. */
+export function buildTime(buildId) {
+  const m = /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(String(buildId));
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : NaN;
+}
 
 /**
  * Publishes one build to KV so that readers only ever see a whole build.
@@ -78,15 +93,21 @@ export const KV_SETTLE_MS = 75_000;
  *      (new keys: nothing a reader is using is overwritten)
  *   3. check every key is there and the build's stamp reads back
  *   4. wait for KV to settle
- *   5. move the pointer: current = this build, previous = the one that was live
- *   6. delete builds that are neither
+ *   5. read the pointer again (another publisher may have moved it), then
+ *      write it: current = this build, previous = the one that was live,
+ *      retained = every superseded build still inside the retention time
+ *   6. delete only builds superseded longer ago than BUILD_RETENTION_MS, and
+ *      unlisted builds older than that
  *
  * A failure in steps 1 to 4 leaves the pointer alone: readers stay on the
- * build they had, whole, and the half-written keys are never read (the next
- * publish removes them). A failure in step 5 leaves either pointer, and both
- * builds are complete. A failure in step 6 is logged and costs only storage.
+ * build they had, whole, and the half-written keys are never read. A failure
+ * in step 5 leaves either pointer, and both builds are complete. A failure in
+ * step 6 is logged and costs only storage.
  *
- * This is one pointer over immutable keys, not a transaction: see
+ * What a reader is guaranteed: the build named `current` by any pointer value
+ * that was live in the last BUILD_RETENTION_MS is still complete in KV, and so
+ * is the build before the live one. Beyond that the answer is 503, never a
+ * mixture. This is one pointer over immutable keys, not a transaction: see
  * src/nfl/snapshot.js for what readers can still observe.
  *
  * @param {{key:string,value:string}[]} entries  payloads under their plain nfl: names
@@ -99,13 +120,17 @@ export async function publishKv(entries, { buildId, season, asOfWeek, kv = wrang
   if (!/^[A-Za-z0-9-]+$/.test(String(buildId))) throw new Error(`build id "${buildId}" cannot be used in a KV key`);
   if (!entries.some((e) => e.key === "nfl:meta")) throw new Error("the build has no nfl:meta payload");
 
+  const readPointer = async () => {
+    if (!(await kv.list(POINTER_KEY)).includes(POINTER_KEY)) return null;
+    let p = null;
+    try { p = JSON.parse(await kv.get(POINTER_KEY)); } catch { p = null; }
+    if (!p?.current?.build_id) throw new Error("the live pointer (nfl:current) exists but cannot be read; nothing was changed");
+    return p;
+  };
+
   // 1. what is live
-  let live = null;
-  if ((await kv.list(POINTER_KEY)).includes(POINTER_KEY)) {
-    try { live = JSON.parse(await kv.get(POINTER_KEY)); } catch { live = null; }
-    if (!live?.current?.build_id) throw new Error("the live pointer (nfl:current) exists but cannot be read; nothing was changed");
-    if (live.current.build_id === buildId) throw new Error(`build ${buildId} is already the live build`);
-  }
+  const atStart = await readPointer();
+  if (atStart?.current.build_id === buildId) throw new Error(`build ${buildId} is already the live build`);
 
   // 2. this build, under its own keys
   log(`  KV: writing ${entries.length} payloads under ${BUILD_PREFIX}${buildId}: ...`);
@@ -122,20 +147,41 @@ export async function publishKv(entries, { buildId, season, asOfWeek, kv = wrang
   // 4. settle
   if (settleMs > 0) { log(`  KV: waiting ${Math.round(settleMs / 1000)}s before pointing readers at the build ...`); await sleep(settleMs); }
 
-  // 5. the pointer
-  const pointer = { schema: 1, current: { build_id: buildId, season, as_of_week: asOfWeek, published_at: now(), names: entries.map((e) => e.key.slice(4)) }, previous: live?.current ?? null };
+  // 5. the pointer, built on what is live NOW (a concurrent publisher may have moved it during the wait)
+  const live = await readPointer();
+  if (live?.current.build_id === buildId) throw new Error(`build ${buildId} is already the live build`);
+  if (live && atStart && live.current.build_id !== atStart.current.build_id) log(`  KV: another publish moved the pointer to ${live.current.build_id} meanwhile; this build goes on top of it`);
+  const nowIso = now(), nowMs = Date.parse(nowIso);
+  // every superseded build still stored, newest first; the first is the reader's fallback and is always kept
+  const superseded = [];
+  if (live) {
+    superseded.push({ ...live.current, superseded_at: nowIso });
+    const older = live.retained ? live.retained.filter((b) => b.build_id !== live.current.build_id) : live.previous ? [{ ...live.previous, superseded_at: live.previous.superseded_at ?? live.current.published_at ?? nowIso }] : [];
+    for (const b of older) if (b?.build_id && b.build_id !== buildId && !superseded.some((x) => x.build_id === b.build_id)) superseded.push(b);
+  }
+  const expired = superseded.filter((b, i) => i > 0 && nowMs - Date.parse(b.superseded_at) > BUILD_RETENTION_MS);
+  const retained = superseded.filter((b) => !expired.includes(b));
+  const pointer = { schema: 2, current: { build_id: buildId, season, as_of_week: asOfWeek, published_at: nowIso, names: entries.map((e) => e.key.slice(4)) }, previous: retained[0] ?? null, retained };
   await kv.put(POINTER_KEY, JSON.stringify(pointer));
   let back = null;
   try { back = JSON.parse(await kv.get(POINTER_KEY)); } catch { back = null; }
   if (back?.current?.build_id !== buildId) throw new Error("the pointer did not read back as this build");
-  log(`  KV: live build is now ${buildId}${pointer.previous ? ` (previous: ${pointer.previous.build_id})` : ""}`);
+  log(`  KV: live build is now ${buildId}${pointer.previous ? ` (previous: ${pointer.previous.build_id}; ${retained.length} superseded build(s) retained)` : ""}`);
 
-  // 6. builds nobody points at
+  // 6. only what is old enough that no reader can still be on it
   let removed = 0;
   try {
-    const keep = new Set([buildId, pointer.previous?.build_id].filter(Boolean));
-    const old = (await kv.list(BUILD_PREFIX)).filter((k) => k.startsWith(BUILD_PREFIX) && !keep.has(k.slice(BUILD_PREFIX.length).split(":")[0]));
-    if (old.length) { await kv.bulkDelete(old); removed = old.length; log(`  KV: removed ${removed} keys of older builds`); }
+    const listed = new Set([buildId, ...retained.map((b) => b.build_id)]);
+    const gone = new Set(expired.map((b) => b.build_id));
+    const keys = (await kv.list(BUILD_PREFIX)).filter((k) => k.startsWith(BUILD_PREFIX));
+    const idOf = (k) => k.slice(BUILD_PREFIX.length).split(":")[0];
+    const unlisted = [...new Set(keys.map(idOf))].filter((id) => !listed.has(id) && !gone.has(id));
+    // an unlisted build (failed, or dropped by a concurrent publisher) goes only when its own id says it is old; an id with no time in it is left alone
+    for (const id of unlisted) if (nowMs - buildTime(id) > BUILD_RETENTION_MS) gone.add(id);
+    const young = unlisted.filter((id) => !gone.has(id));
+    if (young.length) log(`  KV: ${young.length} unlisted build(s) kept until they are ${BUILD_RETENTION_MS / 3600_000} hours old: ${young.join(", ")}`);
+    const old = keys.filter((k) => gone.has(idOf(k)));
+    if (old.length) { await kv.bulkDelete(old); removed = old.length; log(`  KV: removed ${removed} keys of ${gone.size} build(s) past retention`); }
   } catch (err) {
     log(`  KV: older builds were not removed (${failureLine(err)}); the next publish will try again`);
   }

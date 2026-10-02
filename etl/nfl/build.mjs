@@ -21,9 +21,12 @@
 //   --full                  emit every table slice, ignoring what D1 already holds
 //   --kv-settle-seconds N   wait before moving the pointer (default 75, never under 60 against the account)
 //   --kv-local              publish KV to wrangler's local store instead of the account (rehearsal)
+//   --archive-pending       publish without r2: the consumed source files are kept in
+//                           etl/nfl/archive-pending/<build id>/ and the build says its archive is pending
+// A publish to the account without r2 and without --archive-pending is refused.
 //
 // The builder never sees the SharpAPI key. Odds are the Worker's job.
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, cpSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchDataset, readDataset, DATASETS } from "./sources.mjs";
@@ -75,6 +78,17 @@ export function runChecks({ games, pbp, defGames, teamWeeks, playerWeeks, roster
   add("player weeks present for finished games", !finals.length || playerWeeks.length > 0, `${playerWeeks.length} player-week rows`);
   add("injury statuses all recognized", injuryInfo.unknown.size === 0, injuryInfo.unknown.size ? `unrecognized: ${JSON.stringify([...injuryInfo.unknown])}` : "all mapped");
   return checks;
+}
+
+/**
+ * The source archive is part of a publish to the account. Publishing data
+ * without it is refused unless the caller says the archive is pending; then
+ * the consumed files are kept locally and the build says so.
+ */
+export function archivePlan(publish, { kvLocal = false, archivePending = false } = {}) {
+  const toAccount = publish.includes("d1") || (publish.includes("kv") && !kvLocal);
+  const archived = publish.includes("r2");
+  return { toAccount, refuse: toAccount && !archived && !archivePending, pending: toAccount && !archived && archivePending };
 }
 
 /** Everything a build derives, from already-parsed source rows. Pure. */
@@ -186,13 +200,28 @@ async function main() {
     console.log(`BUILD STOPPED: ${failed.length} check(s) failed. Nothing was published; the previous build stays live.`);
     process.exit(1);
   }
+  // The source archive belongs to a publish. Leaving it out has to be said, not implied.
+  const archiving = archivePlan(publish, { kvLocal: args.includes("--kv-local"), archivePending: args.includes("--archive-pending") });
+  if (archiving.refuse) {
+    console.log("BUILD STOPPED: a publish includes the source archive. Add r2 to --publish, or pass --archive-pending to publish with the archive explicitly pending. Nothing was published.");
+    process.exit(1);
+  }
+  let archive = { status: "not_published", files: snapshots.length };
+  if (archiving.pending) {
+    const kept = join(HERE, "archive-pending", buildId);
+    cpSync(join(outDir, "archive"), kept, { recursive: true });
+    archive = { status: "pending", files: snapshots.length, note: "Source files are held outside the archive bucket until it exists." };
+    console.log(`  ARCHIVE PENDING: ${snapshots.length} source files kept in ${kept} (not in R2)`);
+  }
   let archiveFailed = 0;
   if (publish.includes("r2")) {
     const files = snapshots.map((s) => ({ dataset: s.name, season, sha256: s.sha256, key: archiveKey(s), path: join(outDir, "archive", archiveKey(s)) }));
     const r2 = publishR2(files, readArchivedSnapshots());
     archiveFailed = r2.failed;
     for (const row of snapshotRows) row.archive_key = r2.keys.get(row.dataset) ?? null;
+    archive = { status: r2.failed ? "failed" : "archived", files: snapshots.length };
   }
+  derived.archive = archive;
   const schema = readSchema(join(ROOT, "migrations", "0001_nfl_foundation.sql"));
   const existing = full || !publish.includes("d1") ? new Map() : readExistingPartitions();
   const plan = planWrites(schema, tables, existing, { buildId, writtenAt: startedAt });
