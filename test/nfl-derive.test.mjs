@@ -277,12 +277,13 @@ test("a broken dataset fails its checks, and a failed check is what stops publis
   assert.ok(build.indexOf("BUILD STOPPED") < build.indexOf("publishR2(files"), "and before the archive");
 });
 
-test("KV publishing refuses any key outside the nfl: namespace and writes the build stamp last", async () => {
-  const src = readFileSync(new URL("../etl/nfl/publish.mjs", import.meta.url), "utf8");
-  assert.match(src, /refusing to publish non-NFL KV keys/);
-  assert.ok(src.indexOf("kv-payloads.json\"), ...KV_TARGET") > 0 && src.indexOf("kv-payloads.json\"), ...KV_TARGET") < src.indexOf("kv-meta.json\"), ...KV_TARGET"), "payloads, then nfl:meta");
+// How those payloads reach KV, and what a failed publish leaves readers with, is in nfl-publish.test.mjs.
+test("every payload the builder produces is in the nfl: namespace, and none uses a name reserved for the publisher or the odds refresh", async () => {
   const { buildPayloads } = await import("../etl/nfl/payloads.mjs");
-  for (const key of Object.keys(buildPayloads(derived))) assert.ok(key.startsWith("nfl:"), key);
+  const keys = Object.keys(buildPayloads(derived));
+  for (const key of keys) assert.ok(key.startsWith("nfl:"), key);
+  assert.ok(!keys.some((k) => k === "nfl:current" || k.startsWith("nfl:build:") || k.startsWith("nfl:odds:")));
+  assert.ok(keys.includes("nfl:meta"));
 });
 
 test("a game the schedule calls final but whose stats have not arrived produces no rows and does not advance the week", () => {

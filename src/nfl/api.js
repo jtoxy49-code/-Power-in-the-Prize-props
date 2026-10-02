@@ -1,7 +1,9 @@
 // NFL API: every /api/nfl/* route. Mounted from src/index.js AFTER the session
 // and Premium gates, so these routes inherit the product's auth and add none
 // of their own. They only read the KV objects the builder and the odds refresh
-// wrote; nothing here computes football or calls an outside service.
+// wrote; nothing here computes football or calls an outside service. Builder
+// payloads are read through one snapshot per request (see snapshot.js), so a
+// response never mixes two builds.
 //
 //   GET /api/nfl/meta                       build stamp, source freshness, module flags
 //   GET /api/nfl/teams                      the canonical team table
@@ -17,6 +19,7 @@ import { PROPS } from "./props.js";
 import { ODDS_KEY, oddsConfig } from "./odds.js";
 import { bestPrices, freshness } from "./odds-rules.js";
 import { buildResearch } from "./research.js";
+import { withSnapshot, SnapshotUnavailable } from "./snapshot.js";
 
 const json = (body, status = 200, maxAge = 60) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": status === 200 ? `private, max-age=${maxAge}` : "no-store" } });
 const bad = (message) => json({ error: message }, 400);
@@ -24,9 +27,9 @@ const missing = (message) => json({ error: message }, 404);
 const kv = (env, key) => env.PROPS_DATA.get(key, "json");
 const PLAYER_ID = /^\d{2}-\d{7}$/;
 
-async function currentDefense(env) {
-  const ptr = await kv(env, "nfl:defense:current");
-  return ptr ? kv(env, ptr.key) : null;
+async function currentDefense(snap) {
+  const ptr = await snap.get("nfl:defense:current");
+  return ptr ? snap.get(ptr.key) : null;
 }
 
 /**
@@ -56,16 +59,6 @@ export async function handleNflApi(request, env, url, now = Date.now()) {
 
   if (path === "/api/nfl/teams") return json({ teams: NFL_TEAMS }, 200, 86400);
 
-  if (path === "/api/nfl/meta") {
-    const meta = await kv(env, "nfl:meta");
-    return meta ? json(meta) : missing("no NFL build has been published yet");
-  }
-
-  if (path === "/api/nfl/slate") {
-    const slate = await kv(env, "nfl:slate:current");
-    return slate ? json(slate) : missing("no NFL slate has been published yet");
-  }
-
   if (path === "/api/nfl/odds") {
     const odds = await kv(env, ODDS_KEY);
     if (!odds) return json({ sport: "nfl", updated_at: null, markets: [], games: {}, note: "no NFL odds have been stored" });
@@ -77,17 +70,41 @@ export async function handleNflApi(request, env, url, now = Date.now()) {
     return json(out);
   }
 
+  // Everything below reads builder payloads: one build per request.
+  try {
+    return await withSnapshot(env, async (snap) => {
+      const res = await builderRoute(snap, env, path, q, now);
+      res.headers.set("x-nfl-build", snap.build_id ?? "unversioned");
+      return res;
+    });
+  } catch (err) {
+    if (err instanceof SnapshotUnavailable) return json({ error: "NFL data is being republished; try again in a minute" }, 503);
+    throw err;
+  }
+}
+
+async function builderRoute(snap, env, path, q, now) {
+  if (path === "/api/nfl/meta") {
+    const meta = await snap.get("nfl:meta");
+    return meta ? json(meta) : missing("no NFL build has been published yet");
+  }
+
+  if (path === "/api/nfl/slate") {
+    const slate = await snap.get("nfl:slate:current");
+    return slate ? json(slate) : missing("no NFL slate has been published yet");
+  }
+
   if (path === "/api/nfl/defense") {
     const team = (q.get("team") || "").toUpperCase();
     if (!isTeamId(team)) return bad("team must be a canonical NFL team_id, for example BAL");
-    const defense = await currentDefense(env);
+    const defense = await currentDefense(snap);
     if (!defense) return missing("no defensive data has been published yet");
     const { teams, ...rest } = defense;
     return json({ ...rest, team_id: team, ...(teams[team] || { games: 0, metrics: {}, vs_position: {} }) }, 200, 300);
   }
 
   if (path === "/api/nfl/injuries") {
-    const status = await kv(env, "nfl:status:latest");
+    const status = await snap.get("nfl:status:latest");
     if (!status) return missing("no injury data has been published yet");
     const team = (q.get("team") || "").toUpperCase();
     if (!team) return json(status, 200, 300);
@@ -99,10 +116,10 @@ export async function handleNflApi(request, env, url, now = Date.now()) {
   if (path === "/api/nfl/player" || path === "/api/nfl/gamelog" || path === "/api/nfl/research") {
     const id = q.get(path === "/api/nfl/research" ? "player" : "id") || "";
     if (!PLAYER_ID.test(id)) return bad("player id must be a GSIS id, for example 00-0034796");
-    const index = await kv(env, "nfl:players:index");
+    const index = await snap.get("nfl:players:index");
     const where = index?.players?.[id];
     if (!where) return missing("no such player on a current roster");
-    const team = await kv(env, `nfl:team:${where.team_id}`);
+    const team = await snap.get(`nfl:team:${where.team_id}`);
     const player = team?.players?.find((p) => p.player_id === id);
     if (!player) return missing("no such player on a current roster");
 
@@ -111,7 +128,7 @@ export async function handleNflApi(request, env, url, now = Date.now()) {
 
     const prop = q.get("prop");
     if (prop && !PROPS[prop]) return bad(`prop must be one of: ${Object.keys(PROPS).join(", ")}`);
-    const [slate, defense, status, odds] = await Promise.all([kv(env, "nfl:slate:current"), currentDefense(env), kv(env, "nfl:status:latest"), kv(env, ODDS_KEY)]);
+    const [slate, defense, status, odds] = await Promise.all([snap.get("nfl:slate:current"), currentDefense(snap), snap.get("nfl:status:latest"), kv(env, ODDS_KEY)]);
     const research = buildResearch({ playerId: id, propType: prop || undefined, team, slate, defense, status, odds, now, cfg: oddsConfig(env), ladders: q.get("ladders") === "1" });
     return research ? json(research) : missing("no research payload for that player");
   }

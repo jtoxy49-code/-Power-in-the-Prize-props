@@ -83,6 +83,59 @@ test("no ladder rung ever becomes a main line, for any FanDuel market", () => {
   assert.ok(flaggedElsewhere >= 5, `the provider flag pointed at a different line in ${flaggedElsewhere} FanDuel markets`);
 });
 
+// The two provider behaviors that break a naive reading of the feed must stay
+// in the synthetic rows themselves, so these checks read the raw rows, before
+// any of the pipeline's own rules have run.
+test("the synthetic feed keeps the provider's failure cases: a wrong FanDuel main flag and over-only ladders", () => {
+  const groups = new Map();
+  for (const r of rows.filter((x) => x.sportsbook === "fanduel" && !x.is_live && V1_MARKET_TYPES.includes(x.market_type))) {
+    const k = `${r.event_id}|${r.player_name}|${r.market_type}`;
+    if (!groups.has(k)) groups.set(k, { market: r.market_type, lines: new Map() });
+    const lines = groups.get(k).lines;
+    if (!lines.has(r.line)) lines.set(r.line, { sides: new Set(), flagged: false });
+    lines.get(r.line).sides.add(r.selection_type);
+    if (r.is_main_line) lines.get(r.line).flagged = true;
+  }
+  assert.ok(groups.size >= 20, "FanDuel markets are present");
+  let wrongFlag = 0, rungs = 0;
+  for (const g of groups.values()) {
+    const all = [...g.lines.values()];
+    const twoSided = all.filter((l) => l.sides.has("over") && l.sides.has("under"));
+    const overOnly = all.filter((l) => l.sides.has("over") && !l.sides.has("under"));
+    assert.equal(twoSided.length, 1, "exactly one line carries both prices");
+    assert.ok(overOnly.length >= 6, "the rest is an over-only ladder");
+    assert.equal(all.filter((l) => l.sides.has("under") && !l.sides.has("over")).length, 0);
+    assert.equal(all.filter((l) => l.flagged).length, 1, "the provider flags exactly one line as main");
+    rungs += overOnly.length;
+    if (overOnly.some((l) => l.flagged)) { wrongFlag++; assert.equal(twoSided[0].flagged, false); assert.notEqual(g.market, "player_receptions", "the wrong flag is a yardage behavior"); }
+  }
+  assert.ok(wrongFlag >= 5, `the main flag sits on an over-only rung in ${wrongFlag} FanDuel markets`);
+  assert.ok(wrongFlag < groups.size, "and is right in the others, so a rule that trusts it fails only some of the time");
+  assert.ok(rungs > 200);
+  // what trusting the flag would have published: an over-only line as a main line
+  const trusting = [...groups.values()].filter((g) => [...g.lines.values()].some((l) => l.flagged && !l.sides.has("under"))).length;
+  assert.equal(trusting, wrongFlag);
+});
+
+test("a FanDuel market that is only an over-only ladder gets no main line, and no rung is promoted", () => {
+  const mclaurin = byBook("fanduel").filter((o) => o.player_name === "Terry McLaurin" && o.prop_type === "rec_yds");
+  const ladderOnly = mclaurin.filter((o) => o.line !== 50.5);
+  assert.ok(ladderOnly.length >= 12 && ladderOnly.every((o) => o.side === "over"));
+  assert.ok(ladderOnly.some((o) => o.provider_main), "the provider's main flag is still on the 49.5 rung");
+  const { entries, implausible } = buildBookMarkets(ladderOnly, "2026-10-02T03:07:00.000Z");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].book.main, null, "a flagged over-only rung is not a main line");
+  assert.equal(entries[0].book.provider_flagged_line, 49.5);
+  assert.equal(entries[0].book.ladder.length, ladderOnly.length, "the ladder is kept as a ladder");
+  assert.equal(implausible.length, 0);
+  // beside DraftKings, the market shows DraftKings' line alone; nothing from the ladder is priced against it
+  const dkOffers = byBook("draftkings").filter((o) => o.player_name === "Terry McLaurin" && o.prop_type === "rec_yds");
+  const merged = mergeMarkets([...buildBookMarkets(dkOffers, "2026-10-02T03:07:00.000Z").entries, ...entries]);
+  const best = bestPrices({ books: merged[0].books }, CAPTURE);
+  assert.deepEqual(best.lines.map((l) => l.line), [51.5]);
+  assert.deepEqual(best.lines[0].books.map((b) => b.sportsbook), ["draftkings"]);
+});
+
 test("DraftKings: one two-sided main line per market, found by the same rule", () => {
   const dk = markets.flatMap((m) => m.books.filter((b) => b.sportsbook === "draftkings"));
   const withMain = dk.filter((b) => b.main);

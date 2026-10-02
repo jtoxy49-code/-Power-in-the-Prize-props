@@ -11,11 +11,16 @@
 //   node etl/nfl/build.mjs --season 2026 --publish d1    then apply out/d1.sql to remote D1
 //   node etl/nfl/build.mjs --season 2026 --publish d1,kv ... and write the payloads to KV
 //   node etl/nfl/build.mjs --season 2026 --publish r2,d1,kv  also archive the sources to R2
-// Publish order: R2 archive, then D1, then KV payloads, then the build stamp.
-// Exit codes: 0 ok; 1 the build or a check failed and NOTHING was published;
-// 2 the data was published but the R2 archive failed.
-//   --as-of-week N   build as if entering Week N (default: the first week with a game left)
-//   --full           emit every table slice, ignoring what D1 already holds
+// Publish order: R2 archive, then D1, then this build's own KV keys, and only
+// once those are verified and have settled, the pointer readers follow
+// (publish.mjs, src/nfl/snapshot.js). D1 is not on the request path.
+// Exit codes: 0 ok; 1 a check failed and nothing was published, or a publish
+// step failed and readers were left on the build they had; 2 the data was
+// published but the R2 archive failed.
+//   --as-of-week N          build as if entering Week N (default: the first week with a game left)
+//   --full                  emit every table slice, ignoring what D1 already holds
+//   --kv-settle-seconds N   wait before moving the pointer (default 75, never under 60 against the account)
+//   --kv-local              publish KV to wrangler's local store instead of the account (rehearsal)
 //
 // The builder never sees the SharpAPI key. Odds are the Worker's job.
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -176,7 +181,7 @@ async function main() {
   }
   writeFileSync(join(outDir, "archive", "manifest.json"), JSON.stringify({ build_id: buildId, season, as_of_week: asOfWeek, started_at: startedAt, sources: snapshotRows, checks, counts }, null, 2));
 
-  const { readExistingPartitions, publishD1, publishKv, publishR2, readArchivedSnapshots } = await import("./publish.mjs");
+  const { readExistingPartitions, publishD1, publishKv, wranglerKv, failureLine, KV_SETTLE_MS, publishR2, readArchivedSnapshots } = await import("./publish.mjs");
   if (failed.length && !args.includes("--allow-failed-checks")) {
     console.log(`BUILD STOPPED: ${failed.length} check(s) failed. Nothing was published; the previous build stays live.`);
     process.exit(1);
@@ -211,7 +216,18 @@ async function main() {
   console.log(`  output: ${outDir}`);
 
   if (publish.includes("d1")) publishD1(join(outDir, "d1.sql"));
-  if (publish.includes("kv")) publishKv(join(outDir, "kv.json"));
+  if (publish.includes("kv")) {
+    const local = args.includes("--kv-local");
+    // against the account the wait is never shorter than KV's documented 60 seconds
+    const settleMs = local ? Number(opt("--kv-settle-seconds", 0)) * 1000 : Math.max(60, Number(opt("--kv-settle-seconds", KV_SETTLE_MS / 1000))) * 1000;
+    try {
+      await publishKv(Object.entries(payloads).map(([key, value]) => ({ key, value: JSON.stringify(value) })), { buildId, season, asOfWeek, kv: wranglerKv({ local, dir: outDir }), settleMs });
+    } catch (err) {
+      console.log(`KV PUBLISH FAILED: ${failureLine(err)}`);
+      console.log("The pointer was not moved by this run: readers keep the build they had. D1 may already hold this build's rows; the next run publishes KV again.");
+      process.exit(1);
+    }
+  }
   if (archiveFailed) { console.log(`BUILD DONE WITH A FAILURE: ${archiveFailed} source file(s) could not be archived to R2. The data was published.`); process.exit(2); }
   console.log("BUILD DONE");
 }

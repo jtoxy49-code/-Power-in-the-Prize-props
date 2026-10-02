@@ -114,17 +114,79 @@ One payload for a player and a prop: the future Player Detail's data.
 
 ## KV keys
 
+A build's payloads are written under keys of their own,
+`nfl:build:{build_id}:{name}`, and are never overwritten. One key,
+`nfl:current`, names the build readers use.
+
 | Key | Written by | Contents |
 |---|---|---|
-| `nfl:meta` | builder, last | Build stamp, source freshness, checks |
-| `nfl:slate:current`, `nfl:slate:{season}:{week}` | builder | This week's games and environment |
-| `nfl:rosters:current` | builder | Skill-position rosters, for resolving odds names |
-| `nfl:team:{team_id}` (32) | builder | That team's player profiles, usage and game logs |
-| `nfl:defense:{season}:{as_of_week}`, `nfl:defense:current` | builder | All 32 defensive profiles |
-| `nfl:status:latest` | builder | Injuries and depth charts |
-| `nfl:players:index` | builder | player_id to team |
+| `nfl:current` | builder, last | The pointer: `{ schema, current: { build_id, season, as_of_week, published_at, names }, previous }` |
+| `nfl:build:{build_id}:meta` | builder | Build stamp, source freshness, checks |
+| `nfl:build:{build_id}:slate:current`, `...:slate:{season}:{week}` | builder | This week's games and environment |
+| `nfl:build:{build_id}:rosters:current` | builder | Skill-position rosters, for resolving odds names |
+| `nfl:build:{build_id}:team:{team_id}` (32) | builder | That team's player profiles, usage and game logs |
+| `nfl:build:{build_id}:defense:{season}:{as_of_week}`, `...:defense:current` | builder | All 32 defensive profiles |
+| `nfl:build:{build_id}:status:latest` | builder | Injuries and depth charts |
+| `nfl:build:{build_id}:players:index` | builder | player_id to team |
 | `nfl:odds:latest` | Worker cron | Current props per book with fetch times |
 | `nfl:odds:unresolved` | Worker cron | Quarantined rows; never served |
+
+The code names a payload by its plain key (`nfl:slate:current`);
+`src/nfl/snapshot.js` maps that to the build being read. Keys with no build in
+the name (`nfl:meta`, `nfl:slate:current`, ...) are from before this scheme and
+are read only while `nfl:current` does not exist.
+
+## Publishing a build, and what readers see if it fails
+
+KV has no multi-key transaction and each key reaches each edge location
+separately, so writing a stamp last does not make a set of keys appear
+together. The publish (`etl/nfl/publish.mjs`) works on that basis:
+
+1. Read the live pointer.
+2. Write the build under its own keys. Nothing a reader uses changes.
+3. Confirm every key is listed and the build's stamp reads back.
+4. Wait 75 seconds (KV documents up to 60 for a write to be visible everywhere).
+5. Write the pointer: `current` is this build, `previous` the one that was live.
+6. Delete builds that are neither. A failure here is logged, not fatal.
+
+A request reads the pointer once and takes every payload from the build it
+names. If a payload of that build cannot be read, the whole request is
+answered again from `previous`; if that cannot be read either, the answer is
+503. Each response names its build: `build_id` in the body, `x-nfl-build` in
+the headers.
+
+| Publish fails at | What readers get |
+|---|---|
+| checks, R2 or D1 (before KV) | The build they had. KV is untouched. |
+| step 2, part of the keys written | The build they had. The new keys are never read; the next publish deletes them. |
+| step 3 or 4 | The build they had. |
+| step 5, write rejected | The build they had. |
+| step 5, write landed but reported as failed | The new build, complete. The run exits 1; the next run sees it as live. |
+| step 6 | The new build. Older keys stay until the next publish. |
+
+Limits that remain:
+
+- It is one pointer over immutable keys, not a transaction across requests.
+  For about a minute after a publish, edge locations move to the new pointer
+  at different times, so two requests (even from one page) can be answered
+  from different builds. A client that needs one build for a page compares
+  `x-nfl-build` across its responses and refetches.
+- KV gives no hard bound on propagation. The wait in step 4 makes a missing
+  payload unlikely; the whole-request fallback is what covers it.
+- Odds (`nfl:odds:latest`) are a separate single key written by the Worker.
+  They join a build by `game_id` and `player_id`, so odds resolved against
+  one build can be shown beside the next build for up to one refresh.
+- D1 is written before KV and is not on the request path. After a failed
+  publish D1 can be ahead of KV, or (if D1 itself failed part of the way)
+  hold some slices of the new build: a slice's hash is recorded after its
+  rows, so the next run rewrites any slice that did not finish. `nfl_builds`
+  records that a build passed its checks and reached D1, not that it is the
+  one being served; `nfl:current` is the authority on that.
+- Two publishes must not move the pointer within the same minute. The
+  builder's 60-second minimum wait and the workflow's concurrency group
+  enforce this.
+- Rollout order: the Worker that reads the pointer is deployed before the
+  first versioned publish. An older Worker keeps reading the unversioned keys.
 
 ## Inspecting the data
 

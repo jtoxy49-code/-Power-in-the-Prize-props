@@ -15,6 +15,7 @@
 // real two-sided yardage line and keep an over-only ladder rung.
 import { V1_MARKET_TYPES } from "./props.js";
 import { normalizeOddsRows, buildBookMarkets, mergeMarkets, FRESHNESS } from "./odds-rules.js";
+import { withSnapshot, SnapshotUnavailable } from "./snapshot.js";
 
 const SHARPAPI_BASE = "https://api.sharpapi.io/api/v1";
 export const ODDS_KEY = "nfl:odds:latest";
@@ -121,9 +122,15 @@ export async function refreshNflOdds(env, { now = Date.now(), fetchImpl = fetch 
   if (env.NFL_ODDS_ENABLED !== "true") return { skipped: "disabled" };
   if (!env.SHARPAPI_KEY) return { skipped: "no_key" };
   const cfg = oddsConfig(env);
-  const [slate, rosters, previous] = await Promise.all([
-    env.PROPS_DATA.get("nfl:slate:current", "json"), env.PROPS_DATA.get("nfl:rosters:current", "json"), env.PROPS_DATA.get(ODDS_KEY, "json"),
-  ]);
+  // the slate and the rosters come from one build, never one of each
+  let slate, rosters;
+  try {
+    [slate, rosters] = await withSnapshot(env, (snap) => Promise.all([snap.get("nfl:slate:current"), snap.get("nfl:rosters:current")]));
+  } catch (err) {
+    if (err instanceof SnapshotUnavailable) return { skipped: "snapshot_unavailable" };
+    throw err;
+  }
+  const previous = await env.PROPS_DATA.get(ODDS_KEY, "json");
   if (!slate?.games?.length || !rosters?.teams) return { skipped: "no_slate" };
   const pregame = slate.games.filter((g) => Date.parse(g.kickoff_utc) > now);
   if (!pregame.length) return { skipped: "no_pregame_games" };
