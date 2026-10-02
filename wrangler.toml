@@ -26,3 +26,15 @@ preview_id = "11a5de824a514523ad820e8df4626da7"
 DISCORD_CLIENT_ID = "1539041781147107400"
 DISCORD_GUILD_ID = "1469350161191800845"
 DISCORD_PREMIUM_ROLE_ID = "1489433371162705940"
+
+# NFL odds ingestion stays OFF until the owner turns it on. With "false" the
+# 10-minute cron sends nothing to the odds provider for NFL.
+NFL_ODDS_ENABLED = "false"
+
+# NFL data (Phase 1). Written only by the builder (etl/nfl); the Worker reads.
+# Schema changes go through migrations/, never by hand.
+[[d1_databases]]
+binding = "NFL_DB"
+database_name = "pwr-props-nfl"
+database_id = "bb574a68-9422-49f4-87b3-26479f2d6980"
+migrations_dir = "migrations"

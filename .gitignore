@@ -4,3 +4,14 @@ node_modules/
 # Wrangler's local state: local KV (including copies of production data made
 # for testing), dev caches and build output. Never committed.
 .wrangler/
+
+# NFL builder: download cache and build output (never committed)
+etl/nfl/.cache/
+etl/nfl/out/
+
+# The raw odds capture from the read-only probe is the provider's data. It is
+# used by one local-only test and is never committed.
+test/fixtures/nfl/odds_probe.json.gz
+
+# Local-only notes, reports and captures. Never committed.
+_private/

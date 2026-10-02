@@ -23,6 +23,8 @@ import { getCachedPitchMetrics } from "./pitch-metrics.js";
 import { getCachedTeamSplits } from "./team-plate-discipline.js";
 import { getCachedMatchup } from "./batter-vs-pitcher.js";
 import { getCachedPitcherSplits } from "./pitcher-splits.js";
+import { handleNflApi } from "./nfl/api.js";
+import { refreshNflOdds } from "./nfl/odds.js";
 import {
   getDiscordAuthUrl,
   exchangeCodeForUser,
@@ -314,6 +316,9 @@ const app = {
       if (entitlement.cookie) out.setCookie = entitlement.cookie;
       if (!entitlement.allow) return entitlementDenied(entitlement.reason, url);
     }
+
+    // --- NFL: every /api/nfl/* route lives in src/nfl, behind the two gates above.
+    if (url.pathname.startsWith("/api/nfl/")) return handleNflApi(request, env, url);
 
     if (url.pathname === "/api/me") {
       const avatarUrl = session?.avatar
@@ -1195,6 +1200,9 @@ const app = {
   async scheduled(event, env, ctx) {
     if (event.cron === "*/10 * * * *") {
       ctx.waitUntil(refreshOdds(env));
+      // NFL odds: a no-op unless the NFL_ODDS_ENABLED var is "true". Its own
+      // promise, so an NFL failure can never fail the MLB refresh.
+      ctx.waitUntil(refreshNflOdds(env).catch((err) => console.error(`NFL odds refresh failed: ${err.message}`)));
     } else {
       ctx.waitUntil(
         (async () => {

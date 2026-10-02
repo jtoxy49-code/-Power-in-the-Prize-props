@@ -1,0 +1,70 @@
+# The NFL builder: heavy data processing outside the Worker.
+#
+# It downloads the nflverse files, derives the weekly and as-of tables, and
+# publishes changed table slices to D1 and the current-week payloads to KV.
+# It never deploys the Worker and never sees the SharpAPI key.
+#
+# It publishes only when the two repository secrets below exist:
+#   CLOUDFLARE_API_TOKEN   a token limited to this account's D1 and Workers KV (edit)
+#   CLOUDFLARE_ACCOUNT_ID
+# Without them it still builds and runs its checks, and publishes nothing.
+name: NFL builder
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season to build (default: the current one)"
+        required: false
+      publish:
+        description: "Where to publish: d1,kv / d1 / none"
+        required: false
+        default: "d1,kv"
+  schedule:
+    # Every day at 08:20 UTC: after nflverse's 07:00 UTC roster, injury and depth-chart refresh.
+    - cron: "20 8 * * *"
+    # Tuesday 10:30 UTC: the weekly build, once Monday night's game is in the play-by-play.
+    - cron: "30 10 * * 2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nfl-builder
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - name: NFL tests
+        run: node --test test/nfl-*.test.mjs
+      - name: Build and publish
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SEASON: ${{ inputs.season }}
+          PUBLISH: ${{ inputs.publish || 'd1,kv' }}
+        run: |
+          ARGS=""
+          if [ -n "$SEASON" ]; then ARGS="--season $SEASON"; fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ "$PUBLISH" = "none" ]; then
+            echo "Building without publishing."
+            node etl/nfl/build.mjs $ARGS
+          else
+            node etl/nfl/build.mjs $ARGS --publish "$PUBLISH"
+          fi
+      - name: Keep the build manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfl-build-manifest
+          path: etl/nfl/out/archive/manifest.json
+          retention-days: 14
+          if-no-files-found: ignore
