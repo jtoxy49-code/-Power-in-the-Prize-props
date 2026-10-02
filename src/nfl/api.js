@@ -17,7 +17,7 @@
 import { NFL_TEAMS, isTeamId } from "./teams.js";
 import { PROPS } from "./props.js";
 import { ODDS_KEY, oddsConfig } from "./odds.js";
-import { bestPrices, freshness } from "./odds-rules.js";
+import { bestPrices, freshness, isPregame, slateCoverage } from "./odds-rules.js";
 import { buildResearch } from "./research.js";
 import { withSnapshot, SnapshotUnavailable } from "./snapshot.js";
 
@@ -41,11 +41,16 @@ export function serveBook(b, now, cfg, ladders) {
   return { ...rest, ...freshness(b.fetched_at, now, cfg), ladder_count: ladder.length, ...(ladders ? { ladder } : {}) };
 }
 
-/** Odds as served: every book entry carries its age and freshness status. */
+/**
+ * Odds as served: every book entry carries its age and freshness status, a
+ * game that has kicked off is left out whatever is still stored for it, and
+ * `coverage` says how much of the slate each book's prices really cover.
+ */
 function decorateOdds(odds, now, cfg, ladders) {
   return {
     ...odds,
-    markets: (odds.markets || []).map((m) => {
+    coverage: slateCoverage(odds, now, cfg),
+    markets: (odds.markets || []).filter((m) => isPregame(odds, m.game_id, now)).map((m) => {
       const books = m.books.map((b) => serveBook(b, now, cfg, ladders));
       return { ...m, books, best: bestPrices({ books }, now, cfg) };
     }),

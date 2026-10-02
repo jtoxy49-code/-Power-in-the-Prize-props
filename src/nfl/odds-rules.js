@@ -13,6 +13,9 @@ import { resolvePlayer } from "./players.js";
 /** Freshness thresholds in minutes. Configurable through the Worker's vars. */
 export const FRESHNESS = { fresh_minutes: 15, stale_minutes: 30 };
 
+/** The sportsbooks V1 reads. */
+export const BOOKS = ["draftkings", "fanduel"];
+
 /** American odds to the bookmaker's implied probability (vig included). */
 export function impliedProbability(american) {
   const o = Number(american);
@@ -66,6 +69,36 @@ export function freshness(fetchedAt, now, cfg = FRESHNESS) {
   if (!Number.isFinite(t)) return { age_minutes: null, status: "stale" };
   const age = Math.max(0, (now - t) / 60000);
   return { age_minutes: Math.round(age * 10) / 10, status: age <= cfg.fresh_minutes ? "fresh" : age <= cfg.stale_minutes ? "aging" : "stale" };
+}
+
+/** Whether the stored odds still describe a pregame market for this game. Unknown kickoff: not served. */
+export function isPregame(odds, gameId, now) {
+  const kickoff = Date.parse(odds?.games?.[gameId]?.kickoff_utc);
+  return Number.isFinite(kickoff) && kickoff > now;
+}
+
+/**
+ * How much of the slate each book's stored prices really cover, right now.
+ * One row per book over the pregame games the odds payload knows: how many
+ * were last retrieved within the fresh window, are aging, are stale, or were
+ * never retrieved. Refreshing one game moves one game.
+ */
+export function slateCoverage(odds, now, cfg = FRESHNESS) {
+  const games = Object.entries(odds?.games || {}).filter(([id]) => isPregame(odds, id, now));
+  const out = {};
+  for (const book of BOOKS) {
+    const row = { games: games.length, fresh: 0, aging: 0, stale: 0, never_fetched: 0, with_lines: 0, oldest_fetched_at: null, newest_fetched_at: null };
+    for (const [, g] of games) {
+      const b = g.books?.[book];
+      if (!b?.fetched_at) { row.never_fetched++; continue; }
+      row[freshness(b.fetched_at, now, cfg).status]++;
+      if (b.markets > 0) row.with_lines++;
+      if (!row.oldest_fetched_at || b.fetched_at < row.oldest_fetched_at) row.oldest_fetched_at = b.fetched_at;
+      if (!row.newest_fetched_at || b.fetched_at > row.newest_fetched_at) row.newest_fetched_at = b.fetched_at;
+    }
+    out[book] = row;
+  }
+  return out;
 }
 
 /**

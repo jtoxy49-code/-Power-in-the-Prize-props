@@ -5,7 +5,7 @@
 // Phase 1 scope: data only. There is no matchup classification, no findings
 // text and no projection in this payload. `model` is always null.
 import { PROPS, emptyModel, weatherFor } from "./props.js";
-import { bestPrices, freshness, FRESHNESS } from "./odds-rules.js";
+import { bestPrices, freshness, isPregame, FRESHNESS } from "./odds-rules.js";
 
 // Which defensive metrics each V1 prop reads, in three tiers. "POS:" means
 // the defense-vs-position table for the player's position group. Phase 1 lists
@@ -100,7 +100,8 @@ export function buildResearch({ playerId, propType, team, slate, defense, status
   const env = game?.environment || null;
 
   // ---- odds: each book's own line, with its age; best price only on a shared number
-  const market = odds?.markets?.find((m) => m.player_id === playerId && m.prop_type === prop.prop_type) || null;
+  // a stored market for a game that has kicked off is not a pregame market any more
+  const market = odds?.markets?.find((m) => m.player_id === playerId && m.prop_type === prop.prop_type && isPregame(odds, m.game_id, now)) || null;
   // ladders (alternate rungs) are left out unless asked for; the count stays
   const books = (market?.books || []).map(({ ladder = [], ...b }) => ({ ...b, ...freshness(b.fetched_at, now, cfg), ladder_count: ladder.length, ...(ladders ? { ladder } : {}) }));
   const usable = books.filter((b) => b.main && b.status !== "stale");

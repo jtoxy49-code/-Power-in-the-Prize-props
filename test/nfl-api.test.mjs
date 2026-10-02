@@ -11,6 +11,7 @@ import { buildPayloads } from "../etl/nfl/payloads.mjs";
 import { readSchema, planWrites, PARTITIONS } from "../etl/nfl/sql.mjs";
 import { handleNflApi } from "../src/nfl/api.js";
 import { refreshNflOdds } from "../src/nfl/odds.js";
+import { localD1 } from "../etl/nfl/local-d1.mjs";
 import { againstLine, PROP_METRICS } from "../src/nfl/research.js";
 import { MODEL_FIELDS, PROPS } from "../src/nfl/props.js";
 
@@ -29,7 +30,7 @@ async function envWithOdds() {
     const start = Number(url.searchParams.get("cursor") || 0);
     return { ok: true, status: 200, json: async () => ({ data: list.slice(start, start + 200), pagination: { has_more: start + 200 < list.length, next_cursor: String(start + 200) } }) };
   };
-  const env = { PROPS_DATA: kv, SHARPAPI_KEY: "k", NFL_ODDS_ENABLED: "true" };
+  const env = { PROPS_DATA: kv, NFL_DB: await localD1({ only: ["0002_nfl_odds_runs.sql"] }), SHARPAPI_KEY: "k", NFL_ODDS_ENABLED: "true" };
   await refreshNflOdds(env, { now: CAPTURE, fetchImpl });
   return env;
 }

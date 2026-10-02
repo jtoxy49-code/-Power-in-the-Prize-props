@@ -21,6 +21,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { handleNflApi } from "../src/nfl/api.js";
 import { refreshNflOdds } from "../src/nfl/odds.js";
+import { localD1 } from "../etl/nfl/local-d1.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -44,7 +45,7 @@ if (flags.has("--probe-odds")) {
     return { ok: true, status: 200, json: async () => ({ data: list.slice(start, start + 200), pagination: { has_more: start + 200 < list.length, next_cursor: String(start + 200) } }) };
   };
   const quiet = console.log; console.log = () => {};
-  await refreshNflOdds({ ...env, SHARPAPI_KEY: "offline-fixture", NFL_ODDS_ENABLED: "true", NFL_ODDS_FANDUEL_GAMES: "16", NFL_ODDS_MAX_REQUESTS: "60" }, { now: captured, fetchImpl });
+  await refreshNflOdds({ ...env, NFL_DB: await localD1({ only: ["0002_nfl_odds_runs.sql"] }), SHARPAPI_KEY: "offline-fixture", NFL_ODDS_ENABLED: "true", NFL_ODDS_FANDUEL_GAMES: "16", NFL_ODDS_MAX_REQUESTS: "60" }, { now: captured, fetchImpl });
   console.log = quiet;
   now = captured + 5 * 60000;
   console.error(`[odds are the frozen capture of ${probe.captured_at}, evaluated 5 minutes later; not live]`);
