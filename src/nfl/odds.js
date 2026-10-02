@@ -21,11 +21,18 @@ const SHARPAPI_BASE = "https://api.sharpapi.io/api/v1";
 export const ODDS_KEY = "nfl:odds:latest";
 export const UNRESOLVED_KEY = "nfl:odds:unresolved";
 
+// The measurement log (see recordObservations). Written only when the Worker
+// var NFL_ODDS_OBSERVE is "true".
+export const OBSERVATIONS_KEY = "nfl:odds:observations";
+export const OBSERVE_KEEP_HOURS = 72;
+export const PROP_ORDER = ["pass_yds", "rush_yds", "rec_yds", "receptions"];
+
 export const ODDS_DEFAULTS = {
   max_requests: 9,           // per run; leaves room under 12 a minute for MLB's pages
   max_pages_per_sweep: 6,
   fanduel_games_per_run: 3,
   page_size: 200,
+  min_interval_minutes: 5,   // a second trigger inside this window does nothing (the cron is every 10)
 };
 
 const intVar = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
@@ -33,6 +40,7 @@ export const oddsConfig = (env = {}) => ({
   ...ODDS_DEFAULTS,
   max_requests: intVar(env.NFL_ODDS_MAX_REQUESTS, ODDS_DEFAULTS.max_requests),
   fanduel_games_per_run: intVar(env.NFL_ODDS_FANDUEL_GAMES, ODDS_DEFAULTS.fanduel_games_per_run),
+  min_interval_minutes: intVar(env.NFL_ODDS_MIN_INTERVAL_MINUTES, ODDS_DEFAULTS.min_interval_minutes),
   fresh_minutes: intVar(env.NFL_ODDS_FRESH_MINUTES, FRESHNESS.fresh_minutes),
   stale_minutes: intVar(env.NFL_ODDS_STALE_MINUTES, FRESHNESS.stale_minutes),
 });
@@ -77,13 +85,15 @@ export async function sweepOdds({ key, params, budget, fetchImpl = fetch, cfg = 
       if (!byId.has(id)) order.push(id);
       byId.set(id, row);
     }
+    // what the provider says is left of this minute, recorded on every response
+    const header = res.headers?.get?.("x-ratelimit-remaining");
+    const remaining = header == null ? NaN : Number(header);
+    const nearLimit = Number.isFinite(remaining) && remaining <= RATE_RESERVE;
+    if (Number.isFinite(remaining)) budget.provider_remaining = remaining;
+    if (nearLimit) budget.left = 0; // nothing else is sent in this run, by this sweep or the next
     cursor = body?.pagination?.has_more ? body.pagination.next_cursor : null;
     if (!cursor) { complete = true; break; }
-    const remaining = Number(res.headers?.get?.("x-ratelimit-remaining"));
-    if (res.headers?.get?.("x-ratelimit-remaining") != null && Number.isFinite(remaining)) {
-      budget.provider_remaining = remaining;
-      if (remaining <= RATE_RESERVE) { budget.left = 0; stopped = "provider_rate_limit_near"; break; }
-    }
+    if (nearLimit) { stopped = "provider_rate_limit_near"; break; }
   }
   if (!complete && !stopped) stopped = "page_cap";
   return { rows: order.map((id) => byId.get(id)), pages, requests, restarts, complete, stopped };
@@ -134,7 +144,15 @@ export async function refreshNflOdds(env, { now = Date.now(), fetchImpl = fetch 
   if (!slate?.games?.length || !rosters?.teams) return { skipped: "no_slate" };
   const pregame = slate.games.filter((g) => Date.parse(g.kickoff_utc) > now);
   if (!pregame.length) return { skipped: "no_pregame_games" };
+  // Two triggers close together must not both spend the provider's allowance.
+  // KV is not a lock, so this is a guard against a duplicate or overlapping
+  // run, not a guarantee.
+  const sincePrevious = now - Date.parse(previous?.updated_at);
+  if (Number.isFinite(sincePrevious) && sincePrevious >= 0 && sincePrevious < cfg.min_interval_minutes * 60000) return { skipped: "too_soon" };
 
+  // "live" only when the rows came from the provider through the real fetch.
+  // A payload built from a fixture or a capture can never carry that label.
+  const source = fetchImpl === globalThis.fetch ? "live" : "fixture";
   const budget = { left: cfg.max_requests };
   const nowIso = new Date(now).toISOString();
   const market = V1_MARKET_TYPES.join(",");
@@ -147,7 +165,8 @@ export async function refreshNflOdds(env, { now = Date.now(), fetchImpl = fetch 
     const { books: _all, ...head } = m;
     kept.get(k).push({ ...head, book: b });
   }
-  const runs = [], quarantine = [], dropped = {};
+  const runs = [], quarantine = [], dropped = {}, observed = [];
+  const pregameIds = new Set(pregame.map((g) => g.game_id));
   const apply = (sweep, sportsbook) => {
     const norm = normalizeOddsRows(sweep.rows, ctx);
     quarantine.push(...norm.quarantine);
@@ -155,6 +174,7 @@ export async function refreshNflOdds(env, { now = Date.now(), fetchImpl = fetch 
     const done = completeEvents(sweep.rows, sweep.complete);
     const byGame = new Map();
     for (const o of norm.offers) { if (!byGame.has(o.game_id)) byGame.set(o.game_id, []); byGame.get(o.game_id).push(o); }
+    const seen = {};
     for (const [eventId, game] of norm.events) {
       if (!game) continue;
       books[game.game_id] = { ...(books[game.game_id] || {}), event_id: eventId, kickoff_utc: game.kickoff_utc, books: { ...(books[game.game_id]?.books || {}) } };
@@ -163,18 +183,22 @@ export async function refreshNflOdds(env, { now = Date.now(), fetchImpl = fetch 
       for (const x of implausible) quarantine.push({ reason: "implausible_main_line", sportsbook, ...x });
       kept.set(`${game.game_id}|${sportsbook}`, entries);
       books[game.game_id].books[sportsbook] = { fetched_at: nowIso, markets: entries.length };
+      if (pregameIds.has(game.game_id)) seen[game.game_id] = observe(entries);
     }
     runs.push({ sportsbook, requests: sweep.requests, pages: sweep.pages, rows: sweep.rows.length, complete: sweep.complete, restarts: sweep.restarts, stopped: sweep.stopped });
-    return new Set([...norm.events.values()].filter(Boolean).map((g) => g.game_id));
+    const log = { sportsbook, requests: sweep.requests, rows: sweep.rows.length, complete: sweep.complete, stopped: sweep.stopped, games: seen };
+    observed.push(log);
+    return { games: new Set([...norm.events.values()].filter(Boolean).map((g) => g.game_id)), log };
   };
 
   // DraftKings: everything, every run
   const dk = await sweepOdds({ key: env.SHARPAPI_KEY, params: { sportsbook: "draftkings", market }, budget, fetchImpl, cfg });
-  const dkGames = apply(dk, "draftkings");
+  const dkApplied = apply(dk, "draftkings");
   // a complete sweep with no rows for a game is an answer too: DraftKings has not posted it
-  if (dk.complete) for (const g of pregame) if (!dkGames.has(g.game_id)) {
+  if (dk.complete) for (const g of pregame) if (!dkApplied.games.has(g.game_id)) {
     kept.set(`${g.game_id}|draftkings`, []);
     books[g.game_id] = { ...(books[g.game_id] || {}), kickoff_utc: g.kickoff_utc, books: { ...(books[g.game_id]?.books || {}), draftkings: { fetched_at: nowIso, markets: 0 } } };
+    dkApplied.log.games[g.game_id] = observe([]);
   }
 
   // FanDuel: a rotation of games, by the provider event id learned from earlier rows
@@ -182,9 +206,9 @@ export async function refreshNflOdds(env, { now = Date.now(), fetchImpl = fetch 
   for (const g of pickFanduelGames(known, books, now, cfg.fanduel_games_per_run)) {
     if (budget.left <= 0) break;
     const sweep = await sweepOdds({ key: env.SHARPAPI_KEY, params: { sportsbook: "fanduel", market, event_id: books[g.game_id].event_id }, budget, fetchImpl, cfg });
-    apply(sweep, "fanduel");
+    const applied = apply(sweep, "fanduel");
     // a complete sweep that returned nothing still counts as a check: FanDuel has not posted this game
-    if (sweep.complete && !sweep.rows.length) { kept.set(`${g.game_id}|fanduel`, []); books[g.game_id].books.fanduel = { fetched_at: nowIso, markets: 0 }; }
+    if (sweep.complete && !sweep.rows.length) { kept.set(`${g.game_id}|fanduel`, []); books[g.game_id].books.fanduel = { fetched_at: nowIso, markets: 0 }; applied.log.games[g.game_id] = observe([]); }
   }
 
   // started games leave the pregame payload entirely
@@ -195,7 +219,7 @@ export async function refreshNflOdds(env, { now = Date.now(), fetchImpl = fetch 
   const markets = mergeMarkets(entries);
 
   const payload = {
-    sport: "nfl", season: slate.season, week: slate.week, updated_at: nowIso,
+    sport: "nfl", season: slate.season, week: slate.week, updated_at: nowIso, source,
     freshness_rule: { fresh_minutes: cfg.fresh_minutes, stale_minutes: cfg.stale_minutes },
     games: books, markets,
     counts: { markets: markets.length, exposed_markets: markets.filter((m) => m.exposed).length, unresolved: quarantine.length, dropped },
@@ -204,8 +228,44 @@ export async function refreshNflOdds(env, { now = Date.now(), fetchImpl = fetch 
   };
   await env.PROPS_DATA.put(ODDS_KEY, JSON.stringify(payload));
   await recordUnresolved(env, quarantine, nowIso);
+  if (env.NFL_ODDS_OBSERVE === "true") {
+    // measurement only: it must never fail a refresh that has already been stored
+    try { await recordObservations(env, { at: nowIso, source, provider_requests_left: budget.provider_remaining ?? null, sweeps: observed }); } catch (err) { console.warn(`NFL odds observation log not written: ${err.message}`); }
+  }
   console.log(`NFL odds: ${markets.length} markets (${payload.counts.exposed_markets} exposed), ${quarantine.length} quarantined, ${runs.reduce((a, r) => a + r.requests, 0)} requests; ${runs.map((r) => `${r.sportsbook} ${r.rows} rows${r.complete ? "" : ` (${r.stopped})`}`).join(", ")}`);
   return { markets: markets.length, unresolved: quarantine.length, runs };
+}
+
+/**
+ * What one completed look at a book's game found, per V1 prop in PROP_ORDER:
+ * [markets with a two-sided main line, the provider's newest timestamp on them].
+ * [0, null] means the book was checked and had nothing posted for that prop.
+ */
+function observe(entries) {
+  return PROP_ORDER.map((prop) => {
+    const posted = entries.filter((e) => e.prop_type === prop && e.book.main);
+    const newest = posted.reduce((a, e) => (e.book.seen_at && String(e.book.seen_at) > a ? String(e.book.seen_at) : a), "");
+    return [posted.length, newest || null];
+  });
+}
+
+/** The log is kept in one key per UTC hour, so a run rewrites a few records, not a day of them. */
+export const observationsKey = (iso) => `${OBSERVATIONS_KEY}:${iso.slice(0, 13).replace(/[-T]/g, "")}`;
+
+/**
+ * The measurement log: one record per refresh, each hour's records expiring
+ * on their own after OBSERVE_KEEP_HOURS. It records what each run actually
+ * fetched and when, so the real refresh interval of each book and market can
+ * be computed from successful observations (scripts/nfl-odds-cadence.mjs)
+ * instead of being assumed from the cron schedule. Never served to the app.
+ * One extra KV write per run, which is why it is off unless NFL_ODDS_OBSERVE
+ * is "true".
+ */
+export async function recordObservations(env, run) {
+  const key = observationsKey(run.at);
+  const stored = await env.PROPS_DATA.get(key, "json");
+  const runs = [...(stored?.runs || []), run];
+  await env.PROPS_DATA.put(key, JSON.stringify({ sport: "nfl", updated_at: run.at, prop_order: PROP_ORDER, runs }), { expirationTtl: OBSERVE_KEEP_HOURS * 3600 });
 }
 
 /**

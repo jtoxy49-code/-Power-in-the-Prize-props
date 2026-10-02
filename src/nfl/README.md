@@ -57,7 +57,7 @@ the as-of week does not advance past them.
 licensed provider is connected.
 
 ### `/api/nfl/odds[?game=<game_id>][&player=<player_id>][&exposed=all][&ladders=1]`
-`{ sport, season, week, updated_at, freshness_rule: { fresh_minutes, stale_minutes }, games: { <game_id>: { event_id, kickoff_utc, books: { <sportsbook>: { fetched_at, markets } } } }, markets: [...], counts, runs }`
+`{ sport, season, week, updated_at, source, freshness_rule: { fresh_minutes, stale_minutes }, games: { <game_id>: { event_id, kickoff_utc, books: { <sportsbook>: { fetched_at, markets } } } }, markets: [...], counts, runs }`
 
 A market: `{ market_id, game_id, player_id, player_name, team_id, position, prop_type, market_type, exposed, books: [...], best }`.
 
@@ -130,6 +130,7 @@ A build's payloads are written under keys of their own,
 | `nfl:build:{build_id}:players:index` | builder | player_id to team |
 | `nfl:odds:latest` | Worker cron | Current props per book with fetch times |
 | `nfl:odds:unresolved` | Worker cron | Quarantined rows; never served |
+| `nfl:odds:observations:{YYYYMMDDHH}` | Worker cron, only when `NFL_ODDS_OBSERVE` is `"true"` | What each refresh of that UTC hour fetched; expires after 72 hours; never served |
 
 The code names a payload by its plain key (`nfl:slate:current`);
 `src/nfl/snapshot.js` maps that to the build being read. Keys with no build in
@@ -187,6 +188,28 @@ Limits that remain:
   enforce this.
 - Rollout order: the Worker that reads the pointer is deployed before the
   first versioned publish. An older Worker keeps reading the unversioned keys.
+
+## Odds refresh: switches and measurement
+
+The refresh runs after the MLB refresh in the same 10-minute cron and shares
+the provider's per-minute allowance with it.
+
+| Worker var | Default | Effect |
+|---|---|---|
+| `NFL_ODDS_ENABLED` | `"false"` | Anything but `"true"`: no request is sent to the provider |
+| `NFL_ODDS_MAX_REQUESTS` | 9 | Requests one run may send |
+| `NFL_ODDS_FANDUEL_GAMES` | 3 | FanDuel games per run (rotation) |
+| `NFL_ODDS_MIN_INTERVAL_MINUTES` | 5 | A trigger sooner than this after the last stored refresh does nothing |
+| `NFL_ODDS_OBSERVE` | off | `"true"` writes the observation log (one more KV write per run) |
+| `NFL_ODDS_FRESH_MINUTES`, `NFL_ODDS_STALE_MINUTES` | 15, 30 | Freshness thresholds |
+
+A run also stops sending when the provider's `x-ratelimit-remaining` header
+reaches 1, and on a 429.
+
+The stored odds carry `source`: `"live"` when the rows came from the provider
+through the real fetch, `"fixture"` for anything built from test data or a
+capture. `scripts/nfl-odds-cadence.mjs` reads the observation log and reports
+the interval each book and prop was really refreshed at, from live runs only.
 
 ## Inspecting the data
 

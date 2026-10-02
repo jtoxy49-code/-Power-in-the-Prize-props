@@ -7,7 +7,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadOddsRows, derive, memoryKv } from "./fixtures/nfl/load.mjs";
 import { impliedProbability, selectMainLine, freshness, bestPrices, normalizeOddsRows, buildBookMarkets, mergeMarkets, FRESHNESS } from "../src/nfl/odds-rules.js";
-import { sweepOdds, completeEvents, pickFanduelGames, refreshNflOdds, ODDS_KEY, UNRESOLVED_KEY, ODDS_DEFAULTS } from "../src/nfl/odds.js";
+import { sweepOdds, completeEvents, pickFanduelGames, refreshNflOdds, observationsKey, ODDS_KEY, UNRESOLVED_KEY, OBSERVATIONS_KEY, PROP_ORDER, ODDS_DEFAULTS } from "../src/nfl/odds.js";
+import { cadenceReport, mergeLogs } from "../scripts/nfl-odds-cadence.mjs";
 import { buildPayloads } from "../etl/nfl/payloads.mjs";
 import { V1_MARKET_TYPES, PROPS } from "../src/nfl/props.js";
 
@@ -445,4 +446,142 @@ test("the sweep stops before spending the provider's last requests of the minute
   assert.equal(out.requests, 2, "the second response said one request was left, so the sweep stopped there");
   assert.equal(out.rows.length, 200, "the rows already read are kept");
   assert.equal(budget.left, 0, "and nothing else is sent in this run");
+});
+
+// ---------- before the canary: the shared allowance, overlap, and measurement ----------
+test("a sweep that finishes with the provider's allowance at its reserve leaves nothing for the next sweep", async () => {
+  const kv = baseKv();
+  const provider = fakeProvider(rows);
+  // the provider reports plenty left until DraftKings' last page, then one
+  const fetchImpl = async (url) => { const body = await (await provider(url)).json(); return { ok: true, status: 200, json: async () => body, headers: new Map([["x-ratelimit-remaining", body.pagination.has_more ? "8" : "1"]]) }; };
+  const out = await refreshNflOdds({ PROPS_DATA: kv, SHARPAPI_KEY: "k", NFL_ODDS_ENABLED: "true" }, { now: CAPTURE, fetchImpl });
+  assert.deepEqual(out.runs.map((r) => r.sportsbook), ["draftkings"], "no FanDuel request was sent");
+  assert.equal(out.runs[0].complete, true, "the DraftKings sweep itself finished and is stored");
+  const stored = await kv.get(ODDS_KEY, "json");
+  assert.equal(stored.provider_requests_left, 1, "the header is recorded even when it arrives on the last page");
+  assert.ok(stored.markets.length > 150);
+});
+
+test("a second trigger inside the minimum interval sends nothing to the provider", async () => {
+  const kv = baseKv();
+  const provider = fakeProvider(rows);
+  let calls = 0;
+  const fetchImpl = async (url) => { calls++; return provider(url); };
+  const env = { PROPS_DATA: kv, SHARPAPI_KEY: "k", NFL_ODDS_ENABLED: "true" };
+  await refreshNflOdds(env, { now: CAPTURE, fetchImpl });
+  const first = calls, writes = kv.writes.length;
+  assert.deepEqual(await refreshNflOdds(env, { now: CAPTURE + 2 * 60000, fetchImpl }), { skipped: "too_soon" });
+  assert.equal(calls, first);
+  assert.equal(kv.writes.length, writes, "and writes nothing");
+  const later = await refreshNflOdds(env, { now: CAPTURE + 10 * 60000, fetchImpl });
+  assert.ok(later.runs.length >= 1 && calls > first, "the next scheduled run goes ahead");
+});
+
+test("stored odds say where they came from: 'live' only when the rows came through the real fetch", async () => {
+  const kv = baseKv();
+  const env = { PROPS_DATA: kv, SHARPAPI_KEY: "k", NFL_ODDS_ENABLED: "true" };
+  await refreshNflOdds(env, { now: CAPTURE, fetchImpl: fakeProvider(rows) });
+  assert.equal((await kv.get(ODDS_KEY, "json")).source, "fixture", "an injected provider is never labeled live");
+  // called the way the cron calls it, with no fetchImpl; the global fetch is replaced so no network is used
+  const real = globalThis.fetch;
+  globalThis.fetch = fakeProvider(rows);
+  try { await refreshNflOdds(env, { now: CAPTURE + 10 * 60000 }); } finally { globalThis.fetch = real; }
+  assert.equal((await kv.get(ODDS_KEY, "json")).source, "live");
+});
+
+test("the observation log is written only when switched on: one record per refresh, per game and prop, in hourly keys that expire", async () => {
+  const kv = baseKv();
+  const ttls = {};
+  const store = { get: (k, t) => kv.get(k, t), put: async (k, v, opts) => { if (opts?.expirationTtl) ttls[k] = opts.expirationTtl; return kv.put(k, v); } };
+  const env = { PROPS_DATA: store, SHARPAPI_KEY: "k", NFL_ODDS_ENABLED: "true" };
+  await refreshNflOdds(env, { now: CAPTURE, fetchImpl: fakeProvider(rows) });
+  assert.ok(![...kv.store.keys()].some((k) => k.startsWith(OBSERVATIONS_KEY)), "off by default");
+  const on = { ...env, NFL_ODDS_OBSERVE: "true" };
+  for (const m of [10, 20, 30]) await refreshNflOdds(on, { now: CAPTURE + m * 60000, fetchImpl: fakeProvider(rows) });
+  assert.equal(observationsKey(new Date(CAPTURE + 10 * 60000).toISOString()), `${OBSERVATIONS_KEY}:2026100203`);
+  const log = await kv.get(`${OBSERVATIONS_KEY}:2026100203`, "json");
+  assert.equal(log.runs.length, 3, "the three runs of that UTC hour");
+  assert.equal(ttls[`${OBSERVATIONS_KEY}:2026100203`], 72 * 3600, "each hour's records expire on their own");
+  assert.ok(!(ODDS_KEY in ttls), "the odds themselves never expire");
+  assert.deepEqual(log.prop_order, PROP_ORDER);
+  const run = log.runs[0];
+  assert.equal(run.at, new Date(CAPTURE + 10 * 60000).toISOString());
+  assert.equal(run.source, "fixture");
+  assert.equal(run.sweeps[0].sportsbook, "draftkings");
+  const game = run.sweeps[0].games["2026_04_IND_WAS"];
+  assert.equal(game.length, 4, "one entry per V1 prop");
+  assert.ok(game.every(([n, seen]) => n > 0 && !Number.isNaN(Date.parse(seen))), "markets with a main line, and the provider's newest timestamp");
+  assert.ok(!log.runs.some((r) => r.sweeps.some((s) => "2026_04_PIT_CLE" in s.games)), "a game that has started is not an observation");
+  const fd = log.runs.flatMap((r) => r.sweeps.filter((s) => s.sportsbook === "fanduel"));
+  for (const r of log.runs) {
+    const n = r.sweeps.filter((s) => s.sportsbook === "fanduel").length;
+    assert.ok(n >= 1 && n <= ODDS_DEFAULTS.fanduel_games_per_run, "the FanDuel rotation, as far as the request budget allowed");
+    assert.ok(r.sweeps.reduce((a, s) => a + s.requests, 0) <= ODDS_DEFAULTS.max_requests, "each record shows what the run really spent");
+  }
+  assert.ok(fd.some((s) => Object.values(s.games).some((g) => g.every(([n]) => n === 0))), "a game FanDuel has not posted is recorded as checked, with nothing posted");
+  // the next hour starts its own key; the earlier one is not rewritten
+  const writesBefore = kv.writes.filter((k) => k === `${OBSERVATIONS_KEY}:2026100203`).length;
+  await refreshNflOdds(on, { now: CAPTURE + 60 * 60000, fetchImpl: fakeProvider(rows) });
+  assert.equal((await kv.get(`${OBSERVATIONS_KEY}:2026100204`, "json")).runs.length, 1);
+  assert.equal(kv.writes.filter((k) => k === `${OBSERVATIONS_KEY}:2026100203`).length, writesBefore);
+});
+
+test("a failed observation write never fails the refresh", async () => {
+  const kv = baseKv();
+  const failing = { get: (k, t) => kv.get(k, t), put: async (k, v) => { if (k.startsWith(OBSERVATIONS_KEY)) throw new Error("KV write limit reached"); return kv.put(k, v); } };
+  const warn = console.warn; const warned = [];
+  console.warn = (m) => warned.push(String(m));
+  let out;
+  try { out = await refreshNflOdds({ PROPS_DATA: failing, SHARPAPI_KEY: "k", NFL_ODDS_ENABLED: "true", NFL_ODDS_OBSERVE: "true" }, { now: CAPTURE, fetchImpl: fakeProvider(rows) }); } finally { console.warn = warn; }
+  assert.ok(out.markets > 150);
+  assert.ok((await kv.get(ODDS_KEY, "json")).markets.length > 150, "the odds were stored");
+  assert.ok(warned.some((m) => /observation log not written/.test(m)));
+});
+
+test("cadence is measured between successful live observations, per book and prop; runs that are not live are left out", () => {
+  const at = (m) => new Date(Date.parse("2026-10-04T12:00:00Z") + m * 60000).toISOString();
+  const lines = (m) => PROP_ORDER.map(() => [5, at(m - 2)]);
+  const nothing = PROP_ORDER.map(() => [0, null]);
+  const runs = [];
+  for (let m = 0; m <= 120; m += 10) {
+    const dk = { A: lines(m), B: lines(m) };
+    if (m === 50) delete dk.B; // that sweep was cut short before game B
+    const sweeps = [{ sportsbook: "draftkings", requests: 3, rows: 500, complete: m !== 50, stopped: m === 50 ? "provider_rate_limit_near" : null, games: dk }];
+    const turn = (m / 10) % 4; // FanDuel rotation: game A every 40 minutes, game B checked and not posted
+    if (turn === 0) sweeps.push({ sportsbook: "fanduel", requests: 1, rows: 60, complete: true, stopped: null, games: { A: lines(m) } });
+    if (turn === 1) sweeps.push({ sportsbook: "fanduel", requests: 1, rows: 0, complete: true, stopped: null, games: { B: nothing } });
+    runs.push({ at: at(m), source: "live", provider_requests_left: 12 - 2 * sweeps.length, sweeps });
+  }
+  // a fixture-built run in the same log: FanDuel "posting" game B every prop
+  runs.push({ at: at(5), source: "fixture", provider_requests_left: null, sweeps: [{ sportsbook: "fanduel", requests: 1, rows: 60, complete: true, stopped: null, games: { A: lines(5), B: lines(5) } }] });
+
+  const r = cadenceReport({ prop_order: PROP_ORDER, runs });
+  assert.deepEqual(r.runs, { live: 13, not_live_excluded: 1, first: at(0), last: at(120) });
+  assert.deepEqual(r.run_gap_minutes, { n: 12, median: 10, p90: 10, max: 10 });
+  assert.deepEqual(r.requests_per_run, { n: 13, median: 4, p90: 4, max: 4 });
+  assert.equal(r.provider_requests_left_min, 8);
+  assert.deepEqual(r.sweeps_cut_short, { "draftkings: provider_rate_limit_near": 1 });
+
+  const dk = r.books.draftkings.props.rec_yds;
+  assert.deepEqual(dk.interval_minutes, { n: 23, median: 10, p90: 10, max: 20 }, "the cut-short sweep shows up as one 20-minute interval for game B");
+  assert.deepEqual(dk.share_of_time, { fresh: 0.979, aging: 0.021, stale: 0 });
+  assert.equal(dk.games_with_lines, 2);
+  assert.equal(dk.provider_timestamp_advanced, 1);
+  assert.equal(dk.provider_age_at_fetch_minutes.median, 2);
+
+  const fd = r.books.fanduel.props.rec_yds;
+  assert.deepEqual(fd.interval_minutes, { n: 3, median: 40, p90: 40, max: 40 }, "a 10-minute cron, a 40-minute FanDuel interval");
+  assert.deepEqual(fd.share_of_time, { fresh: 0.375, aging: 0.375, stale: 0.25 });
+  assert.equal(fd.games_with_lines, 1, "the fixture run's game B lines are not counted as live coverage");
+  assert.equal(fd.games_checked, 2);
+  assert.equal(fd.checks_with_nothing_posted, 3);
+
+  // hourly log keys overlap nothing, but a log read twice must not count a run twice
+  const merged = mergeLogs([{ prop_order: PROP_ORDER, runs: runs.slice(0, 8) }, { runs: runs.slice(5) }]);
+  assert.equal(merged.runs.length, runs.length);
+  assert.deepEqual(cadenceReport(merged), r);
+
+  const none = cadenceReport({ prop_order: PROP_ORDER, runs: runs.filter((x) => x.source !== "live") });
+  assert.equal(none.runs.live, 0);
+  assert.deepEqual(none.books, {}, "with no live run there is nothing to report about the live feed");
 });
