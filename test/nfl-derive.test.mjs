@@ -4,6 +4,7 @@
 // cannot leak into an earlier ranking.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { loadSource, derive } from "./fixtures/nfl/load.mjs";
 import { deriveAll } from "../etl/nfl/build.mjs";
 import { defenseAsOf, usageAsOf, tendenciesAsOf, easternToUtc, positionGroup, currentWeek } from "../etl/nfl/derive.mjs";
@@ -246,4 +247,60 @@ test("game environment: implied totals come from the spread and total; weather i
   assert.ok(g.home_plays_pg > 40 && g.home_pass_rate > 0.3 && g.home_pass_rate < 0.8);
   for (const r of env) for (const f of ["weather_temperature_f", "weather_wind_mph", "weather_gust_mph", "weather_precip_probability", "weather_updated_at", "weather_source"]) assert.equal(r[f], null);
   for (const t of tables.nfl_team_tendency_week) assert.ok(Math.abs(t.pass_rate + t.rush_rate - 1) < 1e-3);
+});
+
+// ---------- Phase 1.5: the builder fails loudly and never publishes a broken dataset ----------
+test("schema drift: a source file missing a required column stops the build, naming the dataset", async () => {
+  const { readDataset } = await import("../etl/nfl/sources.mjs");
+  const csv = Buffer.from("game_id,week,posteam,defteam,play_type,qb_dropback,yards_gained,epa,success,rusher_player_id,passer_player_id\n2026_01_A_B,1,A,B,run,0,3,0.1,1,x,y\n");
+  assert.throws(() => readDataset({ name: "pbp", season: 2026, gzip: false, bytes: csv }), /pbp 2026: missing required column\(s\): receiver_player_id/);
+  const { DATASETS } = await import("../etl/nfl/sources.mjs");
+  for (const [name, ds] of Object.entries(DATASETS)) assert.ok(ds.required.length >= 5, `${name} declares its required columns`);
+  assert.ok(!Object.keys(DATASETS).some((n) => /snap|pfr|ftn|ngs/i.test(n)), "no snap-count or unapproved source is in the builder");
+});
+
+test("a broken dataset fails its checks, and a failed check is what stops publishing", async () => {
+  const { runChecks } = await import("../etl/nfl/build.mjs");
+  const { season, source } = loadSource();
+  // a play-by-play file that lost a whole game
+  const broken = deriveAll({ season, source: { ...source, pbp: source.pbp.filter((r) => r.game_id !== "2026_01_BAL_IND") }, capturedDate: "2026-10-02", buildId: "t", builtAt: "2026-10-02T00:00:00.000Z" });
+  const bad = broken.checks.filter((c) => !c.ok).map((c) => c.name);
+  assert.ok(bad.some((n) => n.includes("waited more than 48 hours")), "a Week 1 game still missing weeks later is a fault, not lag");
+  assert.equal(broken.asOfWeek, 1, "and the as-of week does not move past the week with the hole");
+  assert.match(broken.checks.find((c) => !c.ok).detail, /2026_01_BAL_IND/);
+  // rosters gone: receivers cannot be classified
+  const noRoster = deriveAll({ season, source: { ...source, roster_weekly: source.roster_weekly.filter((r) => r.position !== "WR") }, capturedDate: "2026-10-02", buildId: "t", builtAt: "2026-10-02T00:00:00.000Z" });
+  assert.ok(noRoster.checks.some((c) => !c.ok && c.name === "receiver position known for at least 99% of targets"), "unmatched receivers are measured and fail the build");
+  assert.equal(typeof runChecks, "function");
+  const build = readFileSync(new URL("../etl/nfl/build.mjs", import.meta.url), "utf8");
+  assert.ok(build.indexOf("BUILD STOPPED") < build.indexOf("publishD1(join(outDir"), "the check gate comes before any publish call");
+  assert.ok(build.indexOf("BUILD STOPPED") < build.indexOf("publishR2(files"), "and before the archive");
+});
+
+test("KV publishing refuses any key outside the nfl: namespace and writes the build stamp last", async () => {
+  const src = readFileSync(new URL("../etl/nfl/publish.mjs", import.meta.url), "utf8");
+  assert.match(src, /refusing to publish non-NFL KV keys/);
+  assert.ok(src.indexOf("kv-payloads.json\"), ...KV_TARGET") > 0 && src.indexOf("kv-payloads.json\"), ...KV_TARGET") < src.indexOf("kv-meta.json\"), ...KV_TARGET"), "payloads, then nfl:meta");
+  const { buildPayloads } = await import("../etl/nfl/payloads.mjs");
+  for (const key of Object.keys(buildPayloads(derived))) assert.ok(key.startsWith("nfl:"), key);
+});
+
+test("a game the schedule calls final but whose stats have not arrived produces no rows and does not advance the week", () => {
+  const { season, source } = loadSource();
+  const opts = { season, capturedDate: "2026-10-02", buildId: "t" };
+  // Thursday of Week 4 is final in the schedule; the overnight play-by-play does not have it yet
+  const schedule = source.schedule.map((g) => (g.game_id === "2026_04_PIT_CLE" ? { ...g, away_score: "20", home_score: "17" } : g));
+  const friday = deriveAll({ ...opts, source: { ...source, schedule }, builtAt: "2026-10-02T04:30:00.000Z" });
+  assert.equal(friday.asOfWeek, 4, "the week stays open");
+  assert.ok(friday.checks.every((c) => c.ok), "ordinary overnight lag is not a failure");
+  assert.match(friday.checks.find((c) => c.name.includes("waited more than")).detail, /waiting \(normal overnight lag\): 2026_04_PIT_CLE/);
+  assert.deepEqual(friday.derived.pendingGames, ["2026_04_PIT_CLE"]);
+  assert.equal(friday.tables.nfl_player_week.filter((r) => r.week === 4).length, 0, "no invented zero-stat games for Pittsburgh or Cleveland");
+  assert.equal(JSON.stringify(friday.tables.nfl_defense_week), JSON.stringify(tables.nfl_defense_week), "as-of state is untouched");
+  // the same gap three days later is a fault and stops the build
+  const monday = deriveAll({ ...opts, source: { ...source, schedule }, builtAt: "2026-10-05T12:00:00.000Z" });
+  assert.ok(monday.checks.some((c) => !c.ok && /overdue: 2026_04_PIT_CLE/.test(c.detail)));
+  // every game of a week final in the schedule, none ingested: the as-of week still does not move
+  const allFinal = source.schedule.map((g) => (Number(g.week) === 4 ? { ...g, away_score: "20", home_score: "17" } : g));
+  assert.equal(deriveAll({ ...opts, source: { ...source, schedule: allFinal }, builtAt: "2026-10-05T03:00:00.000Z" }).asOfWeek, 4);
 });

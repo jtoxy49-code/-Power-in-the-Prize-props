@@ -45,7 +45,12 @@ export const oddsConfig = (env = {}) => ({
  * already read are kept and duplicates are removed by row id. A second expiry,
  * a 429, or an exhausted request budget ends the sweep with complete = false,
  * and the caller keeps whatever arrived instead of discarding the refresh.
+ *
+ * The provider reports what is left of the per-minute allowance in
+ * x-ratelimit-remaining. When it reaches RATE_RESERVE the sweep stops, so NFL
+ * never spends the last requests of a minute.
  */
+export const RATE_RESERVE = 1;
 export async function sweepOdds({ key, params, budget, fetchImpl = fetch, cfg = ODDS_DEFAULTS }) {
   const byId = new Map();
   const order = [];
@@ -73,6 +78,11 @@ export async function sweepOdds({ key, params, budget, fetchImpl = fetch, cfg = 
     }
     cursor = body?.pagination?.has_more ? body.pagination.next_cursor : null;
     if (!cursor) { complete = true; break; }
+    const remaining = Number(res.headers?.get?.("x-ratelimit-remaining"));
+    if (res.headers?.get?.("x-ratelimit-remaining") != null && Number.isFinite(remaining)) {
+      budget.provider_remaining = remaining;
+      if (remaining <= RATE_RESERVE) { budget.left = 0; stopped = "provider_rate_limit_near"; break; }
+    }
   }
   if (!complete && !stopped) stopped = "page_cap";
   return { rows: order.map((id) => byId.get(id)), pages, requests, restarts, complete, stopped };
@@ -183,6 +193,7 @@ export async function refreshNflOdds(env, { now = Date.now(), fetchImpl = fetch 
     games: books, markets,
     counts: { markets: markets.length, exposed_markets: markets.filter((m) => m.exposed).length, unresolved: quarantine.length, dropped },
     runs,
+    provider_requests_left: budget.provider_remaining ?? null,
   };
   await env.PROPS_DATA.put(ODDS_KEY, JSON.stringify(payload));
   await recordUnresolved(env, quarantine, nowIso);

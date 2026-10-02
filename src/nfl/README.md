@@ -39,7 +39,11 @@ All `GET`, all behind the existing session and Premium gates, all answering
 `cache-control: private`. Errors are `{ "error": "..." }` with 400, 404 or 405.
 
 ### `/api/nfl/meta`
-`{ sport, season, week, as_of_week, data_through_week, build_id, built_at, modules: { snap_counts, routes, coverage, weather, model }, module_notes, sources: [{ dataset, url, retrieved_at, source_last_modified, sha256, bytes, rows_total }], counts, checks: [{ name, ok, detail }], attribution }`
+`{ sport, season, week, as_of_week, data_through_week, build_id, built_at, modules: { snap_counts, routes, coverage, weather, model }, module_notes, sources: [{ dataset, url, retrieved_at, source_last_modified, sha256, bytes, rows_total }], counts, checks: [{ name, ok, detail }], games_awaiting_stats, attribution }`
+
+`games_awaiting_stats` lists games the schedule calls final whose play-by-play
+the source has not published yet. They are in no game log or aggregate, and
+the as-of week does not advance past them.
 
 ### `/api/nfl/teams`
 `{ teams: [{ team_id, abbreviation, display_name, city, nickname, conference, division }] }`
@@ -52,13 +56,17 @@ All `GET`, all behind the existing session and Premium gates, all answering
 `"indoors"` or `"not_configured"`; every weather number is null until a
 licensed provider is connected.
 
-### `/api/nfl/odds[?game=<game_id>][&player=<player_id>][&exposed=all]`
+### `/api/nfl/odds[?game=<game_id>][&player=<player_id>][&exposed=all][&ladders=1]`
 `{ sport, season, week, updated_at, freshness_rule: { fresh_minutes, stale_minutes }, games: { <game_id>: { event_id, kickoff_utc, books: { <sportsbook>: { fetched_at, markets } } } }, markets: [...], counts, runs }`
 
 A market: `{ market_id, game_id, player_id, player_name, team_id, position, prop_type, market_type, exposed, books: [...], best }`.
 
-A book entry: `{ sportsbook, fetched_at, seen_at, age_minutes, status, main: { line, over, under, over_implied, under_implied, hold, two_sided_lines } | null, ladder: [{ line, over, under }], provider_flagged_line }`.
+A book entry: `{ sportsbook, fetched_at, seen_at, age_minutes, status, main: { line, over, under, over_implied, under_implied, hold, two_sided_lines } | null, ladder_count, provider_flagged_line }`.
 `status` is `fresh` (15 minutes or less), `aging` (to 30) or `stale`.
+
+Ladders (a book's alternate rungs, in practice FanDuel's over-only ladder) are
+not returned by default. `ladders=1` adds `ladder: [{ line, over, under }]` to
+each book entry, here and on `/api/nfl/research`.
 
 `best`: `{ lines_differ, lines: [{ line, books, best_over, best_under, compared_books, stale_books }] }`.
 Prices are compared only between books posting the same number. A stale book
@@ -91,12 +99,12 @@ Rank 1 is the strongest defense. Percentile 100 is the strongest.
 `DNP`, `LIMITED`, `FULL` or null. `reported_at` is null: the source carries no
 report time.
 
-### `/api/nfl/research?player=<player_id>[&prop=<prop_type>]`
+### `/api/nfl/research?player=<player_id>[&prop=<prop_type>][&ladders=1]`
 One payload for a player and a prop: the future Player Detail's data.
 
 `{ sport, season, week, as_of_week, data_through_week, build_id, player, prop: { prop_type, label, stat, market_type, exposed_in_v1 }, game, environment, odds, samples: { season, L5, L10, H2H }, usage, game_log, matchup, personnel, modules, model }`
 
-- `odds`: `{ market_id, books, best, default_line: { line, sportsbook } }` or null.
+- `odds`: `{ market_id, updated_at, books, best, default_line: { line, sportsbook } }` or null.
 - A sample: `{ games, not_counted, mean, median, values, line, over, under, push, over_rate }`. A push is excluded from `over_rate`.
 - `matchup`: `{ opponent_id, as_of_week, games, opponents_faced, metrics: [{ metric_key, scope, tier, label, unit, strong, kind, value, rank, of, percentile, league_avg, sample, small_sample }], classification: null }`. `tier` is `primary`, `secondary` or `context`. `scope` is `team` or `vs_RB`, `vs_WR`, `vs_TE`.
 - `personnel`: `{ player_injury, teammates, offensive_line: { listed_starters, available, of, basis }, opponent_defense_out }`.

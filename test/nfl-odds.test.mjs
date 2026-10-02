@@ -377,3 +377,19 @@ test("unresolved rows are stored for review, not published, and only counts are 
   assert.ok(!logs.join("\n").includes("Nobody Realname"), "the log carries counts, not the rows");
   assert.ok(!logs.join("\n").includes("test-key") && !logs.join("\n").includes('"k"'));
 });
+
+// ---------- Phase 1.5 ----------
+test("the sweep stops before spending the provider's last requests of the minute", async () => {
+  const pages = chunk(dk, 100);
+  let calls = 0;
+  const fetchImpl = async (url) => {
+    const c = url.searchParams.get("cursor"); const i = c ? Number(c) : 0; calls++;
+    return { ...page(pages[i], String(i + 1)), headers: new Map([["x-ratelimit-remaining", String(3 - calls)]]) };
+  };
+  const budget = { left: 9 };
+  const out = await sweepOdds({ key: "k", params: {}, budget, fetchImpl });
+  assert.equal(out.stopped, "provider_rate_limit_near");
+  assert.equal(out.requests, 2, "the second response said one request was left, so the sweep stopped there");
+  assert.equal(out.rows.length, 200, "the rows already read are kept");
+  assert.equal(budget.left, 0, "and nothing else is sent in this run");
+});

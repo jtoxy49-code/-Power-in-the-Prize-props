@@ -1199,10 +1199,13 @@ const app = {
 
   async scheduled(event, env, ctx) {
     if (event.cron === "*/10 * * * *") {
-      ctx.waitUntil(refreshOdds(env));
-      // NFL odds: a no-op unless the NFL_ODDS_ENABLED var is "true". Its own
+      const mlbOdds = refreshOdds(env);
+      ctx.waitUntil(mlbOdds);
+      // NFL odds: a no-op unless the NFL_ODDS_ENABLED var is "true". It starts
+      // only after the MLB refresh has finished (or failed), so MLB always has
+      // first call on the provider's per-minute limit, and it is its own
       // promise, so an NFL failure can never fail the MLB refresh.
-      ctx.waitUntil(refreshNflOdds(env).catch((err) => console.error(`NFL odds refresh failed: ${err.message}`)));
+      ctx.waitUntil(mlbOdds.catch(() => {}).then(() => refreshNflOdds(env)).catch((err) => console.error(`NFL odds refresh failed: ${err.message}`)));
     } else {
       ctx.waitUntil(
         (async () => {

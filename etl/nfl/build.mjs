@@ -10,6 +10,10 @@
 //   node etl/nfl/build.mjs --season 2026 --offline       reuse the download cache
 //   node etl/nfl/build.mjs --season 2026 --publish d1    then apply out/d1.sql to remote D1
 //   node etl/nfl/build.mjs --season 2026 --publish d1,kv ... and write the payloads to KV
+//   node etl/nfl/build.mjs --season 2026 --publish r2,d1,kv  also archive the sources to R2
+// Publish order: R2 archive, then D1, then KV payloads, then the build stamp.
+// Exit codes: 0 ok; 1 the build or a check failed and NOTHING was published;
+// 2 the data was published but the R2 archive failed.
 //   --as-of-week N   build as if entering Week N (default: the first week with a game left)
 //   --full           emit every table slice, ignoring what D1 already holds
 //
@@ -19,7 +23,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchDataset, readDataset, DATASETS } from "./sources.mjs";
 import {
-  buildGames, currentWeek, buildRosters, buildPlayers, positionLookup, derivePlayByPlay, defenseGameRows, teamWeekRows, playerWeekRows,
+  buildGames, currentWeek, ingestedGames, buildRosters, buildPlayers, positionLookup, derivePlayByPlay, defenseGameRows, teamWeekRows, playerWeekRows,
   defenseAsOf, usageAsOf, tendenciesAsOf, injuryRows, depthChartRows, environmentRows,
 } from "./derive.mjs";
 import { readSchema, planWrites } from "./sql.mjs";
@@ -30,14 +34,24 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..");
 
 /** The data checks a build must pass before anything is published. */
-export function runChecks({ games, pbp, defGames, teamWeeks, playerWeeks, rosterInfo, injuryInfo, asOfWeek }) {
+// A finished game normally reaches the play-by-play overnight. Past this many
+// hours after kickoff a missing game is treated as a fault, not as lag.
+export const PBP_LAG_HOURS = 48;
+
+export function runChecks({ games, pbp, defGames, teamWeeks, playerWeeks, rosterInfo, injuryInfo, asOfWeek, builtAt }) {
   const checks = [];
   const add = (name, ok, detail) => checks.push({ name, ok: !!ok, detail });
   const finals = games.filter((g) => g.status === "final");
   add("schedule has 32 teams", new Set(games.flatMap((g) => [g.home_team_id, g.away_team_id])).size === 32, `${new Set(games.flatMap((g) => [g.home_team_id, g.away_team_id])).size} teams`);
   const haveDef = new Set(defGames.map((r) => `${r.game_id}|${r.team_id}`));
   const missingGames = finals.filter((g) => !haveDef.has(`${g.game_id}|${g.home_team_id}`) || !haveDef.has(`${g.game_id}|${g.away_team_id}`));
-  add("every finished game is in the play-by-play", missingGames.length === 0, missingGames.length ? `missing: ${missingGames.map((g) => g.game_id).join(", ")}` : `${finals.length} finished games`);
+  // A finished game from BEFORE the as-of week must be there: the as-of state is built from it.
+  const missingEarlier = missingGames.filter((g) => g.week < asOfWeek);
+  add("every finished game before the as-of week is in the play-by-play", missingEarlier.length === 0, missingEarlier.length ? `missing: ${missingEarlier.map((g) => g.game_id).join(", ")}` : `${finals.length - missingGames.length} finished games ingested`);
+  // A finished game of the current week may still be waiting for the overnight file. That is lag until it is not.
+  const now = Date.parse(builtAt);
+  const overdue = missingGames.filter((g) => Number.isFinite(now) && now - Date.parse(g.kickoff_utc) > PBP_LAG_HOURS * 3600_000);
+  add(`no finished game has waited more than ${PBP_LAG_HOURS} hours for its play-by-play`, overdue.length === 0, overdue.length ? `overdue: ${overdue.map((g) => g.game_id).join(", ")}` : missingGames.length ? `waiting (normal overnight lag): ${missingGames.map((g) => g.game_id).join(", ")}` : "none waiting");
   add("no unknown team codes", pbp.unmatched.unknown_teams.size === 0 && rosterInfo.unknownTeams.size === 0, JSON.stringify({ pbp: [...pbp.unmatched.unknown_teams], roster: [...rosterInfo.unknownTeams] }));
 
   // play-by-play against the official box totals
@@ -61,11 +75,14 @@ export function runChecks({ games, pbp, defGames, teamWeeks, playerWeeks, roster
 /** Everything a build derives, from already-parsed source rows. Pure. */
 export function deriveAll({ season, source, asOfWeek: asOfOverride, capturedDate, buildId, builtAt, snapshots = [] }) {
   const games = buildGames(source.schedule, season);
-  const asOfWeek = asOfOverride ?? currentWeek(games);
   const rosterInfo = buildRosters(source.roster_weekly, season);
   const rosters = rosterInfo.rows;
   const players = buildPlayers(rosters);
   const pbp = derivePlayByPlay(source.pbp, positionLookup(rosters));
+  // the as-of week waits for the play-by-play, not just for the schedule to say "final"
+  const ingested = ingestedGames(pbp);
+  const asOfWeek = asOfOverride ?? currentWeek(games, ingested);
+  const pendingGames = games.filter((g) => g.status === "final" && !ingested.has(g.game_id)).map((g) => g.game_id);
   const defGames = defenseGameRows(season, pbp);
   const teamWeeks = teamWeekRows(season, pbp, source.stats_team_week);
   const pw = playerWeekRows(season, games, rosters, source.stats_player_week, pbp);
@@ -83,9 +100,9 @@ export function deriveAll({ season, source, asOfWeek: asOfOverride, capturedDate
   const environment = environmentRows(games, tendencies, asOfWeek, capturedDate);
   const rosterWeek = Math.max(0, ...rosters.map((r) => r.week).filter((w) => w <= asOfWeek)) || Math.max(0, ...rosters.map((r) => r.week));
 
-  const checks = runChecks({ games, pbp, defGames, teamWeeks, playerWeeks: pw.rows, rosterInfo, injuryInfo, asOfWeek });
+  const checks = runChecks({ games, pbp, defGames, teamWeeks, playerWeeks: pw.rows, rosterInfo, injuryInfo, asOfWeek, builtAt });
   const counts = {
-    games: games.length, games_final: games.filter((g) => g.status === "final").length, players: players.length, roster_rows: rosters.length,
+    games: games.length, games_final: games.filter((g) => g.status === "final").length, games_awaiting_play_by_play: pendingGames.length, players: players.length, roster_rows: rosters.length,
     player_weeks: pw.rows.length, player_weeks_stat_only: pw.statOnly, team_weeks: teamWeeks.length, defense_games: defGames.length,
     as_of_weeks: asOfWeeks.length, injuries: injuryInfo.rows.length, depth_chart_rows: depthCharts.length, environment_games: environment.length,
     targets: pbp.unmatched.targets, targets_no_receiver: pbp.unmatched.targets_no_receiver, targets_unknown_position: pbp.unmatched.targets_unknown_position, targets_other_position: pbp.unmatched.targets_other_position,
@@ -111,7 +128,7 @@ export function deriveAll({ season, source, asOfWeek: asOfOverride, capturedDate
   const derived = {
     season, asOfWeek, buildId, builtAt, capturedDate, games, rosters, rosterWeek, players, playerWeeks: pw.rows, teamWeeks, defGames,
     defenseAsOf: defenseByWeek.get(asOfWeek) || { rows: [], positionRows: [], opponents: new Map() },
-    usage: usageByWeek.get(asOfWeek) || [], tendencies, injuries: injuryInfo.rows, depthCharts, environment, snapshots, counts, checks, pbp,
+    usage: usageByWeek.get(asOfWeek) || [], tendencies, injuries: injuryInfo.rows, depthCharts, environment, snapshots, counts, checks, pbp, pendingGames,
   };
   return { derived, tables, checks, counts, asOfWeek };
 }
@@ -141,7 +158,8 @@ async function main() {
     console.log(`  ${name.padEnd(18)} ${String(source[name].length).padStart(7)} rows  ${(snap.size / 1e6).toFixed(2)} MB  source updated ${snap.last_modified || "unknown"}`);
   }
   const archiveKey = (s) => `nflverse/${s.season ? s.season : "all"}/${buildId}/${s.file}`;
-  const snapshotRows = snapshots.map((s) => ({ build_id: buildId, dataset: s.name, season, source: "nflverse", url: s.url, retrieved_at: s.retrieved_at, source_last_modified: s.last_modified, etag: s.etag, sha256: s.sha256, bytes: s.size, rows_total: s.rows_total ?? null, archive_key: archiveKey(s) }));
+  // archive_key is filled in only once the bytes are really in R2
+  const snapshotRows = snapshots.map((s) => ({ build_id: buildId, dataset: s.name, season, source: "nflverse", url: s.url, retrieved_at: s.retrieved_at, source_last_modified: s.last_modified, etag: s.etag, sha256: s.sha256, bytes: s.size, rows_total: s.rows_total ?? null, archive_key: null }));
 
   const { derived, tables, checks, counts, asOfWeek } = deriveAll({ season, source, asOfWeek: asOfArg ? Number(asOfArg) : undefined, capturedDate, buildId, builtAt: startedAt, snapshots: snapshotRows });
   console.log(`  as-of week ${asOfWeek} (data through Week ${asOfWeek - 1}); ${counts.games_final} of ${counts.games} games final`);
@@ -158,7 +176,18 @@ async function main() {
   }
   writeFileSync(join(outDir, "archive", "manifest.json"), JSON.stringify({ build_id: buildId, season, as_of_week: asOfWeek, started_at: startedAt, sources: snapshotRows, checks, counts }, null, 2));
 
-  const { readExistingPartitions, publishD1, publishKv } = await import("./publish.mjs");
+  const { readExistingPartitions, publishD1, publishKv, publishR2, readArchivedSnapshots } = await import("./publish.mjs");
+  if (failed.length && !args.includes("--allow-failed-checks")) {
+    console.log(`BUILD STOPPED: ${failed.length} check(s) failed. Nothing was published; the previous build stays live.`);
+    process.exit(1);
+  }
+  let archiveFailed = 0;
+  if (publish.includes("r2")) {
+    const files = snapshots.map((s) => ({ dataset: s.name, season, sha256: s.sha256, key: archiveKey(s), path: join(outDir, "archive", archiveKey(s)) }));
+    const r2 = publishR2(files, readArchivedSnapshots());
+    archiveFailed = r2.failed;
+    for (const row of snapshotRows) row.archive_key = r2.keys.get(row.dataset) ?? null;
+  }
   const schema = readSchema(join(ROOT, "migrations", "0001_nfl_foundation.sql"));
   const existing = full || !publish.includes("d1") ? new Map() : readExistingPartitions();
   const plan = planWrites(schema, tables, existing, { buildId, writtenAt: startedAt });
@@ -181,13 +210,9 @@ async function main() {
   console.log(`  KV: ${Object.keys(payloads).length} payloads, ${(kvBytes / 1e6).toFixed(2)} MB`);
   console.log(`  output: ${outDir}`);
 
-  if (failed.length && !args.includes("--allow-failed-checks")) {
-    console.log(`BUILD STOPPED: ${failed.length} check(s) failed. Nothing was published; the previous build stays live.`);
-    process.exit(1);
-  }
   if (publish.includes("d1")) publishD1(join(outDir, "d1.sql"));
   if (publish.includes("kv")) publishKv(join(outDir, "kv.json"));
-  if (publish.includes("r2")) console.log("  R2: not published. R2 is not enabled on the account; the archive stays in out/archive.");
+  if (archiveFailed) { console.log(`BUILD DONE WITH A FAILURE: ${archiveFailed} source file(s) could not be archived to R2. The data was published.`); process.exit(2); }
   console.log("BUILD DONE");
 }
 

@@ -67,14 +67,26 @@ export function buildGames(scheduleRows, season) {
 }
 
 /**
- * The week the product is preparing for: the first week that still has a game
- * to play. Aggregates for it use every earlier week. After the last game of
- * the season it is last week + 1.
+ * The week the product is preparing for: the first week that is not complete.
+ * A week is complete only when every one of its games is final AND its
+ * play-by-play has arrived (`ingested`). The schedule marks a game final within
+ * minutes; the nflverse play-by-play follows overnight. Until it does, the week
+ * stays open, so no as-of state is ever built from a week with a game missing.
+ * After the last complete week of the season it is last week + 1.
+ * @param {Set<string>} [ingested] game_ids present in the play-by-play; omitted = trust the schedule
  */
-export function currentWeek(games) {
-  const open = games.filter((g) => g.status !== "final").map((g) => g.week);
+export function currentWeek(games, ingested) {
+  const done = (g) => g.status === "final" && (!ingested || ingested.has(g.game_id));
+  const open = games.filter((g) => !done(g)).map((g) => g.week);
   if (open.length) return Math.min(...open);
   return games.length ? Math.max(...games.map((g) => g.week)) + 1 : 1;
+}
+
+/** Games both of whose teams appear in the play-by-play facts. */
+export function ingestedGames(pbp) {
+  const teams = new Map();
+  for (const gt of pbp.gameTeams.values()) teams.set(gt.game_id, (teams.get(gt.game_id) || 0) + 1);
+  return new Set([...teams].filter(([, n]) => n >= 2).map(([id]) => id));
 }
 
 // ---------- rosters ----------
@@ -318,8 +330,12 @@ export function teamWeekRows(season, pbp, teamStatRows) {
  * A player who played and has no stat line gets real zeros.
  */
 export function playerWeekRows(season, games, rosterRows, playerStatRows, pbp) {
+  // Only games whose play-by-play has arrived. A game the schedule calls final
+  // but whose stats are not in yet produces NO rows: a row would have to say
+  // "played, zero yards", which would be invented.
+  const ingested = ingestedGames(pbp);
   const gameOf = new Map(); // team|week -> game
-  for (const g of games) { gameOf.set(`${g.home_team_id}|${g.week}`, g); gameOf.set(`${g.away_team_id}|${g.week}`, g); }
+  for (const g of games) { if (!ingested.has(g.game_id)) continue; gameOf.set(`${g.home_team_id}|${g.week}`, g); gameOf.set(`${g.away_team_id}|${g.week}`, g); }
   const stats = new Map();
   for (const r of playerStatRows) if (r.player_id) stats.set(`${r.player_id}|${Number(r.week)}`, r);
   const teamRbCarries = new Map(); // team|week -> carries by RB+FB (box score)

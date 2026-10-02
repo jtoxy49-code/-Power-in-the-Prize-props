@@ -238,3 +238,24 @@ test("V1 stays locked to four props", () => {
   assert.equal(Object.keys(PROPS).length, 4);
   assert.deepEqual(Object.keys(PROP_METRICS).sort(), Object.keys(PROPS).sort());
 });
+
+// ---------- Phase 1.5: production foundation ----------
+test("ladders are not in user-facing routes unless asked for; the count always is", async () => {
+  const id = idOf("Terry McLaurin");
+  const plain = await call(`/api/nfl/research?player=${id}&prop=rec_yds`);
+  for (const b of plain.body.odds.books) { assert.equal("ladder" in b, false, `${b.sportsbook} has no ladder array`); assert.equal(typeof b.ladder_count, "number"); assert.ok(b.fetched_at && b.status && b.age_minutes != null); }
+  assert.equal(plain.body.odds.books.find((b) => b.sportsbook === "fanduel").ladder_count, 13);
+  assert.equal(plain.body.odds.books.find((b) => b.sportsbook === "draftkings").ladder_count, 0);
+  const asked = await call(`/api/nfl/research?player=${id}&prop=rec_yds&ladders=1`);
+  assert.equal(asked.body.odds.books.find((b) => b.sportsbook === "fanduel").ladder.length, 13);
+  const odds = await call("/api/nfl/odds?game=2026_04_IND_WAS");
+  assert.ok(odds.body.markets.every((m) => m.books.every((b) => !("ladder" in b) && typeof b.ladder_count === "number" && b.fetched_at)));
+  const withLadders = await call("/api/nfl/odds?game=2026_04_IND_WAS&ladders=1");
+  assert.ok(withLadders.body.markets.some((m) => m.books.some((b) => b.ladder?.length > 5)));
+});
+
+test("the cron gives MLB first call on the provider: NFL odds start only after the MLB refresh settles", () => {
+  const index = readFileSync(join(ROOT, "src", "index.js"), "utf8");
+  assert.match(index, /const mlbOdds = refreshOdds\(env\);\s*ctx\.waitUntil\(mlbOdds\);/);
+  assert.match(index, /mlbOdds\.catch\(\(\) => \{\}\)\.then\(\(\) => refreshNflOdds\(env\)\)/);
+});

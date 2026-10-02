@@ -135,6 +135,8 @@ export function buildPayloads(d) {
     },
     sources: d.snapshots.map((s) => pick(s, ["dataset", "season", "url", "retrieved_at", "source_last_modified", "sha256", "bytes", "rows_total"])),
     counts: d.counts, checks: d.checks,
+    // finished in the schedule, stats not published by the source yet: in no game log or aggregate
+    games_awaiting_stats: d.pendingGames || [],
     attribution: "Data: nflverse (CC-BY 4.0)",
   };
   return out;

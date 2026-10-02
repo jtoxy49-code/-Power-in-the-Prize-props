@@ -88,7 +88,7 @@ function metricRows(keys, tier, defense, team, group) {
  * @param {object|null} a.odds nfl:odds:latest
  * @param {number} a.now
  */
-export function buildResearch({ playerId, propType, team, slate, defense, status, odds, now, cfg = FRESHNESS }) {
+export function buildResearch({ playerId, propType, team, slate, defense, status, odds, now, cfg = FRESHNESS, ladders = false }) {
   const player = team?.players?.find((p) => p.player_id === playerId);
   if (!player) return null;
   const prop = PROPS[propType || defaultProp(player.position)];
@@ -101,7 +101,8 @@ export function buildResearch({ playerId, propType, team, slate, defense, status
 
   // ---- odds: each book's own line, with its age; best price only on a shared number
   const market = odds?.markets?.find((m) => m.player_id === playerId && m.prop_type === prop.prop_type) || null;
-  const books = (market?.books || []).map((b) => ({ ...b, ...freshness(b.fetched_at, now, cfg) }));
+  // ladders (alternate rungs) are left out unless asked for; the count stays
+  const books = (market?.books || []).map(({ ladder = [], ...b }) => ({ ...b, ...freshness(b.fetched_at, now, cfg), ladder_count: ladder.length, ...(ladders ? { ladder } : {}) }));
   const usable = books.filter((b) => b.main && b.status !== "stale");
   const defaultBook = usable.find((b) => b.sportsbook === "draftkings") || usable[0] || books.find((b) => b.main) || null;
   const line = defaultBook?.main?.line ?? null;
@@ -150,7 +151,7 @@ export function buildResearch({ playerId, propType, team, slate, defense, status
       lines_source: env.lines_source, team_tendencies: team.tendencies, weather: weatherFor(game),
     } : null,
     odds: market ? {
-      market_id: market.market_id, books, best: bestPrices({ books }, now, cfg), default_line: line == null ? null : { line, sportsbook: defaultBook.sportsbook },
+      market_id: market.market_id, updated_at: odds.updated_at ?? null, books, best: bestPrices({ books }, now, cfg), default_line: line == null ? null : { line, sportsbook: defaultBook.sportsbook },
       note: "Each book's own main line. Prices are compared only where books post the same number. A stale book is never 'best'.",
     } : null,
     samples,

@@ -6,7 +6,7 @@
 //   GET /api/nfl/meta                       build stamp, source freshness, module flags
 //   GET /api/nfl/teams                      the canonical team table
 //   GET /api/nfl/slate                      this week's games with environment
-//   GET /api/nfl/odds[?game=&player=]       current props, each book with its age
+//   GET /api/nfl/odds[?game=&player=]       current props, each book with its age (add ladders=1 for alternate rungs)
 //   GET /api/nfl/player?id=                 profile, usage windows, game log
 //   GET /api/nfl/gamelog?id=                the game log alone
 //   GET /api/nfl/defense?team=              one defense: metrics, ranks, vs position
@@ -29,12 +29,21 @@ async function currentDefense(env) {
   return ptr ? kv(env, ptr.key) : null;
 }
 
+/**
+ * A book entry as served: its age and freshness status always; its ladder
+ * (FanDuel's over-only alternate rungs) only when the caller asks for it.
+ */
+export function serveBook(b, now, cfg, ladders) {
+  const { ladder = [], ...rest } = b;
+  return { ...rest, ...freshness(b.fetched_at, now, cfg), ladder_count: ladder.length, ...(ladders ? { ladder } : {}) };
+}
+
 /** Odds as served: every book entry carries its age and freshness status. */
-function decorateOdds(odds, now, cfg) {
+function decorateOdds(odds, now, cfg, ladders) {
   return {
     ...odds,
     markets: (odds.markets || []).map((m) => {
-      const books = m.books.map((b) => ({ ...b, ...freshness(b.fetched_at, now, cfg) }));
+      const books = m.books.map((b) => serveBook(b, now, cfg, ladders));
       return { ...m, books, best: bestPrices({ books }, now, cfg) };
     }),
   };
@@ -60,7 +69,7 @@ export async function handleNflApi(request, env, url, now = Date.now()) {
   if (path === "/api/nfl/odds") {
     const odds = await kv(env, ODDS_KEY);
     if (!odds) return json({ sport: "nfl", updated_at: null, markets: [], games: {}, note: "no NFL odds have been stored" });
-    const out = decorateOdds(odds, now, oddsConfig(env));
+    const out = decorateOdds(odds, now, oddsConfig(env), q.get("ladders") === "1");
     const game = q.get("game"), player = q.get("player");
     if (game) out.markets = out.markets.filter((m) => m.game_id === game);
     if (player) out.markets = out.markets.filter((m) => m.player_id === player);
@@ -103,7 +112,7 @@ export async function handleNflApi(request, env, url, now = Date.now()) {
     const prop = q.get("prop");
     if (prop && !PROPS[prop]) return bad(`prop must be one of: ${Object.keys(PROPS).join(", ")}`);
     const [slate, defense, status, odds] = await Promise.all([kv(env, "nfl:slate:current"), currentDefense(env), kv(env, "nfl:status:latest"), kv(env, ODDS_KEY)]);
-    const research = buildResearch({ playerId: id, propType: prop || undefined, team, slate, defense, status, odds, now, cfg: oddsConfig(env) });
+    const research = buildResearch({ playerId: id, propType: prop || undefined, team, slate, defense, status, odds, now, cfg: oddsConfig(env), ladders: q.get("ladders") === "1" });
     return research ? json(research) : missing("no research payload for that player");
   }
 
