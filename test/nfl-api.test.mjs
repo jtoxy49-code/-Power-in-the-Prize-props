@@ -160,6 +160,35 @@ test("results against a line: an unplayed game is left out, a push is neither ov
   assert.equal(againstLine(games, "receptions", null).over, null);
 });
 
+// Production today holds only the unversioned keys (nfl:meta, nfl:slate:current, ...): no nfl:current
+// pointer and no nfl:build:* keys. The reader deployed before the first versioned publish must serve
+// exactly that, and must not write anything.
+test("with no nfl:current pointer, every builder route is served from the unversioned keys, and nothing is written", async () => {
+  const kv = memoryKv(payloads);
+  assert.ok(![...kv.store.keys()].some((k) => k === "nfl:current" || k.startsWith("nfl:build:")), "the state production is in");
+  const reads = [];
+  const watched = { get: (k, t) => { reads.push(k); return kv.get(k, t); }, put: () => { throw new Error("a reader never writes"); } };
+  const get = async (path) => { const url = new URL(`https://pwr-props.com${path}`); const res = await handleNflApi(new Request(url), { PROPS_DATA: watched }, url, CAPTURE + 5 * 60000); return { status: res.status, body: await res.json(), build: res.headers.get("x-nfl-build") }; };
+  const id = idOf("Terry McLaurin");
+  for (const path of ["/api/nfl/meta", "/api/nfl/slate", `/api/nfl/player?id=${id}`, `/api/nfl/gamelog?id=${id}`, "/api/nfl/defense?team=BAL", "/api/nfl/injuries", "/api/nfl/injuries?team=WAS", `/api/nfl/research?player=${id}`, `/api/nfl/research?player=${id}&prop=receptions`]) {
+    const r = await get(path);
+    assert.equal(r.status, 200, path);
+    assert.equal(r.build, "unversioned", `${path} says which keys it read`);
+    if (r.body.build_id) assert.equal(r.body.build_id, payloads["nfl:meta"].build_id, `${path} is the build those keys hold`);
+  }
+  assert.equal((await get(`/api/nfl/research?player=${id}`)).body.model, null);
+  assert.equal((await get("/api/nfl/player?id=Terry%20McLaurin")).status, 400, "a name is not an id");
+  assert.equal((await get("/api/nfl/player?id=00-0000000")).status, 404);
+  assert.equal((await get("/api/nfl/defense?team=XXX")).status, 400);
+  const odds = await get("/api/nfl/odds");
+  assert.deepEqual([odds.status, odds.body.markets.length, odds.body.note], [200, 0, "no NFL odds have been stored"], "no odds key: an empty answer, not an error");
+  // what was read: the pointer (absent) and then only unversioned keys
+  assert.ok(reads.includes("nfl:current"));
+  assert.ok(reads.filter((k) => k !== "nfl:current").every((k) => !k.startsWith("nfl:build:")));
+  assert.equal(kv.writes.length, 0, "nothing written");
+  assert.ok(![...kv.store.keys()].some((k) => k === "nfl:current" || k.startsWith("nfl:build:")), "and no pointer or build key appeared");
+});
+
 test("the NFL routes are GET only, unknown routes are 404, and nothing is public by itself", async () => {
   assert.equal((await call("/api/nfl/nope")).status, 404);
   const url = new URL("https://pwr-props.com/api/nfl/slate");
