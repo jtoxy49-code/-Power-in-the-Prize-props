@@ -11,22 +11,21 @@
 //   node etl/nfl/build.mjs --season 2026 --publish d1    then apply out/d1.sql to remote D1
 //   node etl/nfl/build.mjs --season 2026 --publish d1,kv ... and write the payloads to KV
 //   node etl/nfl/build.mjs --season 2026 --publish r2,d1,kv  also archive the sources to R2
-// Publish order: R2 archive, then D1, then this build's own KV keys, and only
-// once those are verified and have settled, the pointer readers follow
-// (publish.mjs, src/nfl/snapshot.js). D1 is not on the request path.
-// Exit codes: 0 ok; 1 a check failed and nothing was published, or a publish
-// step failed and readers were left on the build they had; 2 the data was
-// published but the R2 archive failed.
+// Publish order: R2 archive (every object read back and checked), then D1,
+// then this build's own KV keys, and only once those are verified and have
+// settled, the pointer readers follow (publish.mjs, src/nfl/snapshot.js).
+// A publish to the account (d1 or kv) always includes r2. If any archived
+// object cannot be verified, nothing is written to D1 or KV.
+//   --publish r2            archive only: upload and verify, write nothing else
+// Exit codes: 0 ok; 1 a check failed, the archive did not verify, or a publish
+// step failed; in every case readers are left on the build they had.
 //   --as-of-week N          build as if entering Week N (default: the first week with a game left)
 //   --full                  emit every table slice, ignoring what D1 already holds
 //   --kv-settle-seconds N   wait before moving the pointer (default 75, never under 60 against the account)
 //   --kv-local              publish KV to wrangler's local store instead of the account (rehearsal)
-//   --archive-pending       publish without r2: the consumed source files are kept in
-//                           etl/nfl/archive-pending/<build id>/ and the build says its archive is pending
-// A publish to the account without r2 and without --archive-pending is refused.
 //
 // The builder never sees the SharpAPI key. Odds are the Worker's job.
-import { mkdirSync, writeFileSync, rmSync, cpSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchDataset, readDataset, DATASETS } from "./sources.mjs";
@@ -81,14 +80,36 @@ export function runChecks({ games, pbp, defGames, teamWeeks, playerWeeks, roster
 }
 
 /**
- * The source archive is part of a publish to the account. Publishing data
- * without it is refused unless the caller says the archive is pending; then
- * the consumed files are kept locally and the build says so.
+ * The source archive is part of every publish to the account. There is no
+ * way to publish D1 or KV data without it.
  */
-export function archivePlan(publish, { kvLocal = false, archivePending = false } = {}) {
+export function archivePlan(publish, { kvLocal = false } = {}) {
   const toAccount = publish.includes("d1") || (publish.includes("kv") && !kvLocal);
-  const archived = publish.includes("r2");
-  return { toAccount, refuse: toAccount && !archived && !archivePending, pending: toAccount && !archived && archivePending };
+  return { toAccount, refuse: toAccount && !publish.includes("r2") };
+}
+
+/**
+ * The publish sequence, in the only order it may run. Each step is a function
+ * so the order and the gates can be tested; main() passes the real ones.
+ *
+ *   archive()        upload and verify; returns archiveSources()'s result
+ *   prepare(archive) write d1.sql and the payloads, carrying the archive keys
+ *   d1(prepared), kv(prepared)
+ *
+ * Returns { stopped } without running D1 or KV when the archive is required
+ * and missing, or when any archived object did not verify.
+ */
+export async function runPublish(publish, { kvLocal = false } = {}, steps) {
+  if (archivePlan(publish, { kvLocal }).refuse) return { stopped: "archive_required" };
+  let archive = null;
+  if (publish.includes("r2")) {
+    archive = await steps.archive();
+    if (!archive || archive.failures.length || !archive.manifestKey) return { stopped: "archive_failed", archive };
+  }
+  const prepared = await steps.prepare(archive);
+  if (publish.includes("d1")) await steps.d1(prepared);
+  if (publish.includes("kv")) await steps.kv(prepared);
+  return { archive, prepared };
 }
 
 /** Everything a build derives, from already-parsed source rows. Pure. */
@@ -195,69 +216,66 @@ async function main() {
   }
   writeFileSync(join(outDir, "archive", "manifest.json"), JSON.stringify({ build_id: buildId, season, as_of_week: asOfWeek, started_at: startedAt, sources: snapshotRows, checks, counts }, null, 2));
 
-  const { readExistingPartitions, publishD1, publishKv, wranglerKv, failureLine, KV_SETTLE_MS, publishR2, readArchivedSnapshots } = await import("./publish.mjs");
+  const { readExistingPartitions, publishD1, publishKv, wranglerKv, failureLine, KV_SETTLE_MS, archiveSources, wranglerR2, readArchivedSnapshots } = await import("./publish.mjs");
   if (failed.length && !args.includes("--allow-failed-checks")) {
     console.log(`BUILD STOPPED: ${failed.length} check(s) failed. Nothing was published; the previous build stays live.`);
     process.exit(1);
   }
-  // The source archive belongs to a publish. Leaving it out has to be said, not implied.
-  const archiving = archivePlan(publish, { kvLocal: args.includes("--kv-local"), archivePending: args.includes("--archive-pending") });
-  if (archiving.refuse) {
-    console.log("BUILD STOPPED: a publish includes the source archive. Add r2 to --publish, or pass --archive-pending to publish with the archive explicitly pending. Nothing was published.");
+  const kvLocal = args.includes("--kv-local");
+  const files = snapshots.map((s) => ({ dataset: s.name, season, sha256: s.sha256, key: archiveKey(s), path: join(outDir, "archive", archiveKey(s)) }));
+  const result = await runPublish(publish, { kvLocal }, {
+    archive: () => archiveSources(files, readArchivedSnapshots(), {
+      r2: wranglerR2(), tmpDir: join(outDir, "readback"), manifestKey: archiveKey({ season, file: "manifest.json" }),
+      manifest: (keys) => ({ build_id: buildId, season, as_of_week: asOfWeek, started_at: startedAt, sources: snapshotRows.map((r) => ({ ...r, archive_key: keys.get(r.dataset) ?? null })), checks, counts }),
+    }),
+    prepare: (archive) => {
+      if (archive) for (const row of snapshotRows) row.archive_key = archive.keys.get(row.dataset) ?? null;
+      derived.archive = archive ? { status: "archived", files: snapshots.length, manifest_key: archive.manifestKey, uploaded: archive.uploaded, reused: archive.reused } : { status: "not_published", files: snapshots.length };
+      const schema = readSchema(join(ROOT, "migrations", "0001_nfl_foundation.sql"));
+      const existing = full || !publish.includes("d1") ? new Map() : readExistingPartitions();
+      const plan = planWrites(schema, tables, existing, { buildId, writtenAt: startedAt });
+      const finishedAt = new Date().toISOString();
+      const lit = (v) => (v == null ? "NULL" : typeof v === "number" ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
+      const tail = [
+        ...snapshotRows.map((r) => `INSERT OR REPLACE INTO nfl_data_snapshots (${Object.keys(r).join(",")}) VALUES (${Object.values(r).map(lit).join(",")});`),
+        `INSERT OR REPLACE INTO nfl_builds (build_id, season, as_of_week, started_at, finished_at, status, checks_json, counts_json) VALUES (${[buildId, season, asOfWeek, startedAt, finishedAt, failed.length ? "checks_failed" : "ok", JSON.stringify(checks), JSON.stringify(counts)].map(lit).join(",")});`,
+      ];
+      writeFileSync(join(outDir, "d1.sql"), [...plan.statements, ...tail].join("\n") + "\n");
+      const payloads = buildPayloads(derived);
+      writeFileSync(join(outDir, "kv.json"), JSON.stringify(Object.entries(payloads).map(([key, value]) => ({ key, value: JSON.stringify(value) }))));
+      for (const [key, value] of Object.entries(payloads)) {
+        const p = join(outDir, "kv", `${key.replace(/:/g, "__")}.json`);
+        mkdirSync(dirname(p), { recursive: true });
+        writeFileSync(p, JSON.stringify(value, null, 1));
+      }
+      const kvBytes = Object.values(payloads).reduce((a, v) => a + JSON.stringify(v).length, 0);
+      console.log(`  D1: ${plan.written.length} table slices to write (${plan.rows} rows), ${plan.skipped} unchanged and skipped`);
+      console.log(`  KV: ${Object.keys(payloads).length} payloads, ${(kvBytes / 1e6).toFixed(2)} MB`);
+      console.log(`  output: ${outDir}`);
+      return { sqlFile: join(outDir, "d1.sql"), payloads };
+    },
+    d1: (prepared) => publishD1(prepared.sqlFile),
+    kv: async (prepared) => {
+      // against the account the wait is never shorter than KV's documented 60 seconds
+      const settleMs = kvLocal ? Number(opt("--kv-settle-seconds", 0)) * 1000 : Math.max(60, Number(opt("--kv-settle-seconds", KV_SETTLE_MS / 1000))) * 1000;
+      try {
+        await publishKv(Object.entries(prepared.payloads).map(([key, value]) => ({ key, value: JSON.stringify(value) })), { buildId, season, asOfWeek, kv: wranglerKv({ local: kvLocal, dir: outDir }), settleMs });
+      } catch (err) {
+        console.log(`KV PUBLISH FAILED: ${failureLine(err)}`);
+        console.log("The pointer was not moved by this run: readers keep the build they had. D1 may already hold this build's rows; the next run publishes KV again.");
+        process.exit(1);
+      }
+    },
+  });
+  if (result.stopped === "archive_required") {
+    console.log("BUILD STOPPED: a publish to the account includes the source archive. Add r2 to --publish. Nothing was published.");
     process.exit(1);
   }
-  let archive = { status: "not_published", files: snapshots.length };
-  if (archiving.pending) {
-    const kept = join(HERE, "archive-pending", buildId);
-    cpSync(join(outDir, "archive"), kept, { recursive: true });
-    archive = { status: "pending", files: snapshots.length, note: "Source files are held outside the archive bucket until it exists." };
-    console.log(`  ARCHIVE PENDING: ${snapshots.length} source files kept in ${kept} (not in R2)`);
+  if (result.stopped === "archive_failed") {
+    const list = (result.archive?.failures || []).map((x) => `${x.dataset}: ${x.reason}`).join("; ") || "the manifest was not archived";
+    console.log(`BUILD STOPPED: the source archive did not verify (${list}). Nothing was written to D1 or KV; readers keep the build they had.`);
+    process.exit(1);
   }
-  let archiveFailed = 0;
-  if (publish.includes("r2")) {
-    const files = snapshots.map((s) => ({ dataset: s.name, season, sha256: s.sha256, key: archiveKey(s), path: join(outDir, "archive", archiveKey(s)) }));
-    const r2 = publishR2(files, readArchivedSnapshots());
-    archiveFailed = r2.failed;
-    for (const row of snapshotRows) row.archive_key = r2.keys.get(row.dataset) ?? null;
-    archive = { status: r2.failed ? "failed" : "archived", files: snapshots.length };
-  }
-  derived.archive = archive;
-  const schema = readSchema(join(ROOT, "migrations", "0001_nfl_foundation.sql"));
-  const existing = full || !publish.includes("d1") ? new Map() : readExistingPartitions();
-  const plan = planWrites(schema, tables, existing, { buildId, writtenAt: startedAt });
-  const finishedAt = new Date().toISOString();
-  const lit = (v) => (v == null ? "NULL" : typeof v === "number" ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
-  const tail = [
-    ...snapshotRows.map((r) => `INSERT OR REPLACE INTO nfl_data_snapshots (${Object.keys(r).join(",")}) VALUES (${Object.values(r).map(lit).join(",")});`),
-    `INSERT OR REPLACE INTO nfl_builds (build_id, season, as_of_week, started_at, finished_at, status, checks_json, counts_json) VALUES (${[buildId, season, asOfWeek, startedAt, finishedAt, failed.length ? "checks_failed" : "ok", JSON.stringify(checks), JSON.stringify(counts)].map(lit).join(",")});`,
-  ];
-  writeFileSync(join(outDir, "d1.sql"), [...plan.statements, ...tail].join("\n") + "\n");
-  const payloads = buildPayloads(derived);
-  writeFileSync(join(outDir, "kv.json"), JSON.stringify(Object.entries(payloads).map(([key, value]) => ({ key, value: JSON.stringify(value) }))));
-  for (const [key, value] of Object.entries(payloads)) {
-    const p = join(outDir, "kv", `${key.replace(/:/g, "__")}.json`);
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, JSON.stringify(value, null, 1));
-  }
-  const kvBytes = Object.values(payloads).reduce((a, v) => a + JSON.stringify(v).length, 0);
-  console.log(`  D1: ${plan.written.length} table slices to write (${plan.rows} rows), ${plan.skipped} unchanged and skipped`);
-  console.log(`  KV: ${Object.keys(payloads).length} payloads, ${(kvBytes / 1e6).toFixed(2)} MB`);
-  console.log(`  output: ${outDir}`);
-
-  if (publish.includes("d1")) publishD1(join(outDir, "d1.sql"));
-  if (publish.includes("kv")) {
-    const local = args.includes("--kv-local");
-    // against the account the wait is never shorter than KV's documented 60 seconds
-    const settleMs = local ? Number(opt("--kv-settle-seconds", 0)) * 1000 : Math.max(60, Number(opt("--kv-settle-seconds", KV_SETTLE_MS / 1000))) * 1000;
-    try {
-      await publishKv(Object.entries(payloads).map(([key, value]) => ({ key, value: JSON.stringify(value) })), { buildId, season, asOfWeek, kv: wranglerKv({ local, dir: outDir }), settleMs });
-    } catch (err) {
-      console.log(`KV PUBLISH FAILED: ${failureLine(err)}`);
-      console.log("The pointer was not moved by this run: readers keep the build they had. D1 may already hold this build's rows; the next run publishes KV again.");
-      process.exit(1);
-    }
-  }
-  if (archiveFailed) { console.log(`BUILD DONE WITH A FAILURE: ${archiveFailed} source file(s) could not be archived to R2. The data was published.`); process.exit(2); }
   console.log("BUILD DONE");
 }
 

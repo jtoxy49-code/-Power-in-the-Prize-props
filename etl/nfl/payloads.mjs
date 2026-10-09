@@ -134,7 +134,7 @@ export function buildPayloads(d) {
       weather: "No licensed provider connected yet.", model: "Reserved interface only; no model exists.",
     },
     sources: d.snapshots.map((s) => pick(s, ["dataset", "season", "url", "retrieved_at", "source_last_modified", "sha256", "bytes", "rows_total"])),
-    // where the consumed source files are: "archived" (R2), "pending" (held locally), "failed", or "not_published"
+    // "archived": every source file and the manifest are in R2, read back and checked; "not_published": a local build
     archive: d.archive ?? { status: "not_published" },
     counts: d.counts, checks: d.checks,
     // finished in the schedule, stats not published by the source yet: in no game log or aggregate

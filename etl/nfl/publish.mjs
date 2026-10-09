@@ -3,7 +3,8 @@
 // local wrangler login on a developer machine. No credential is read, printed
 // or stored here.
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -197,28 +198,99 @@ export function readArchivedSnapshots() {
   } catch { return new Map(); }
 }
 
+/** The installed wrangler's major version, read when an R2 client is made. */
+function wranglerMajor() {
+  return Number(JSON.parse(readFileSync(join(ROOT, "node_modules", "wrangler", "package.json"), "utf8")).version.split(".")[0]);
+}
+
+/**
+ * The R2 operations the archive needs, through wrangler, against the account.
+ * wrangler 3 acts on the account by default and has no --remote flag; from
+ * wrangler 4 the same commands act on LOCAL storage unless --remote is given,
+ * which would make an upload and its read-back both "succeed" without
+ * anything reaching R2. So the flag is added whenever the major version is 4
+ * or later.
+ */
+export function wranglerR2() {
+  const remote = wranglerMajor() >= 4 ? ["--remote"] : [];
+  return {
+    async put(key, path) { wrangler(["r2", "object", "put", `${R2_BUCKET}/${key}`, `--file=${path}`, "--content-type=application/octet-stream", ...remote], { capture: true }); },
+    async get(key, dest) { wrangler(["r2", "object", "get", `${R2_BUCKET}/${key}`, `--file=${dest}`, ...remote], { capture: true }); },
+  };
+}
+
+const sha256File = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
+
 /**
  * Copies the source files a build consumed to the private R2 bucket, exactly
- * as downloaded. A file whose SHA-256 matches the newest archived copy is not
- * uploaded again; the build points at the existing object. Returns the object
- * key per dataset, or null where the upload failed (the caller reports it and
- * the build is marked failed, without holding back the data publish).
+ * as downloaded, and proves each one is there: every object the build will
+ * point at is read back from R2 and its SHA-256 compared with the one recorded
+ * when the file was downloaded. Nothing is taken on trust.
+ *
+ *   - A file identical to the newest archived copy (same SHA-256 in D1) is not
+ *     uploaded again, but that copy is still read back and checked. If it is
+ *     missing or does not match, the file is uploaded again under this build.
+ *   - After the sources, the build's manifest (source URL, retrieval time,
+ *     upstream last-modified and ETag, SHA-256, bytes, rows, archive key) is
+ *     uploaded and checked the same way.
+ *
+ * Returns { keys, uploaded, reused, verified, failures, manifestKey }. Any
+ * entry in `failures` means the archive is not complete, and the caller must
+ * not publish the data (see runPublish in build.mjs).
+ *
+ * @param {{dataset,season,sha256,key,path}[]} files
+ * @param {Map} archived  "dataset|season" -> { sha256, archive_key } from D1
+ * @param {object} o  { r2: { put(key, path), get(key, dest) }, manifestKey, manifest(keys) -> object, tmpDir, log }
  */
-export function publishR2(files, archived) {
-  const keys = new Map();
-  let uploaded = 0, reused = 0, failed = 0;
+export async function archiveSources(files, archived, { r2, manifestKey, manifest, tmpDir, log = console.log }) {
+  mkdirSync(tmpDir, { recursive: true });
+  const keys = new Map(), failures = [];
+  let uploaded = 0, reused = 0, verified = 0, n = 0;
+  const verify = async (key, expected) => {
+    const dest = join(tmpDir, `readback-${++n}`);
+    try {
+      await r2.get(key, dest);
+      if (!existsSync(dest)) throw new Error(`nothing came back for ${key}`);
+      const got = sha256File(dest);
+      if (got !== expected) throw new Error(`${key} read back with SHA-256 ${got.slice(0, 12)}..., expected ${expected.slice(0, 12)}...`);
+      verified++;
+    } finally { rmSync(dest, { force: true }); }
+  };
+  const why = (err) => failureLine(err);
+
   for (const f of files) {
     const prior = archived.get(`${f.dataset}|${f.season}`);
-    if (prior && prior.sha256 === f.sha256) { keys.set(f.dataset, prior.archive_key); reused++; continue; }
+    if (prior?.archive_key && prior.sha256 === f.sha256) {
+      try { await verify(prior.archive_key, f.sha256); keys.set(f.dataset, prior.archive_key); reused++; continue; }
+      catch (err) { log(`  R2: the archived copy of ${f.dataset} (${prior.archive_key}) did not verify (${why(err)}); uploading it again`); }
+    }
     try {
-      wrangler(["r2", "object", "put", `${R2_BUCKET}/${f.key}`, `--file=${f.path}`, "--content-type=application/octet-stream"], { capture: true });
+      if (sha256File(f.path) !== f.sha256) throw new Error(`the local file no longer matches the SHA-256 recorded at download`);
+      await r2.put(f.key, f.path);
+      await verify(f.key, f.sha256);
       keys.set(f.dataset, f.key); uploaded++;
     } catch (err) {
-      keys.set(f.dataset, null); failed++;
-      const why = String(err.stderr || err.stdout || err.message).split(/\r?\n/).find((l) => /ERROR|enable|denied|fail/i.test(l)) || "see wrangler output";
-      console.log(`  R2 upload FAILED for ${f.dataset}: ${why.trim()}`);
+      keys.set(f.dataset, null);
+      failures.push({ dataset: f.dataset, reason: why(err) });
+      log(`  R2: ${f.dataset} FAILED: ${why(err)}`);
     }
   }
-  console.log(`  R2: ${uploaded} uploaded, ${reused} unchanged and reused, ${failed} failed`);
-  return { keys, failed };
+
+  // the manifest goes last, so it names the archive key of every source
+  let manifestDone = null;
+  if (!failures.length) {
+    const path = join(tmpDir, "manifest.json");
+    try {
+      writeFileSync(path, JSON.stringify(manifest(keys), null, 2));
+      const expected = sha256File(path);
+      await r2.put(manifestKey, path);
+      await verify(manifestKey, expected);
+      manifestDone = manifestKey;
+    } catch (err) {
+      failures.push({ dataset: "manifest", reason: why(err) });
+      log(`  R2: manifest FAILED: ${why(err)}`);
+    }
+  }
+  log(`  R2: ${uploaded} uploaded, ${reused} unchanged and reused, ${verified} objects read back and checked, ${failures.length} failed`);
+  return { keys, uploaded, reused, verified, failures, manifestKey: manifestDone };
 }

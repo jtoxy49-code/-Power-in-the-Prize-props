@@ -275,24 +275,30 @@ test("a broken dataset fails its checks, and a failed check is what stops publis
   assert.ok(noRoster.checks.some((c) => !c.ok && c.name === "receiver position known for at least 99% of targets"), "unmatched receivers are measured and fail the build");
   assert.equal(typeof runChecks, "function");
   const build = readFileSync(new URL("../etl/nfl/build.mjs", import.meta.url), "utf8");
-  assert.ok(build.indexOf("BUILD STOPPED") < build.indexOf("publishD1(join(outDir"), "the check gate comes before any publish call");
-  assert.ok(build.indexOf("BUILD STOPPED") < build.indexOf("publishR2(files"), "and before the archive");
+  assert.ok(build.indexOf("BUILD STOPPED") < build.indexOf("publishD1(prepared.sqlFile"), "the check gate comes before any publish call");
+  assert.ok(build.indexOf("BUILD STOPPED") < build.indexOf("archiveSources(files"), "and before the archive");
 });
 
-test("a publish to the account includes the source archive, or says in so many words that the archive is pending", () => {
-  assert.deepEqual(archivePlan(["r2", "d1", "kv"]), { toAccount: true, refuse: false, pending: false });
-  assert.deepEqual(archivePlan(["d1", "kv"]), { toAccount: true, refuse: true, pending: false }, "leaving r2 out is refused");
-  assert.deepEqual(archivePlan(["kv"]), { toAccount: true, refuse: true, pending: false });
-  assert.deepEqual(archivePlan(["d1"]), { toAccount: true, refuse: true, pending: false });
-  assert.deepEqual(archivePlan(["d1", "kv"], { archivePending: true }), { toAccount: true, refuse: false, pending: true }, "unless it is declared pending");
-  assert.deepEqual(archivePlan(["kv"], { kvLocal: true }), { toAccount: false, refuse: false, pending: false }, "a local rehearsal publishes nothing to the account");
-  assert.deepEqual(archivePlan([]), { toAccount: false, refuse: false, pending: false });
+test("a publish to the account always includes the source archive; there is no override", () => {
+  assert.deepEqual(archivePlan(["r2", "d1", "kv"]), { toAccount: true, refuse: false });
+  assert.deepEqual(archivePlan(["d1", "kv"]), { toAccount: true, refuse: true }, "leaving r2 out is refused");
+  assert.deepEqual(archivePlan(["kv"]), { toAccount: true, refuse: true });
+  assert.deepEqual(archivePlan(["d1"]), { toAccount: true, refuse: true });
+  assert.deepEqual(archivePlan(["d1", "kv"], { archivePending: true }), { toAccount: true, refuse: true }, "the old pending option no longer exists: it changes nothing");
+  assert.deepEqual(archivePlan(["r2"]), { toAccount: false, refuse: false }, "archive only: allowed, and writes no data");
+  assert.deepEqual(archivePlan(["kv"], { kvLocal: true }), { toAccount: false, refuse: false }, "a local rehearsal publishes nothing to the account");
+  assert.deepEqual(archivePlan([]), { toAccount: false, refuse: false });
+  const build = readFileSync(new URL("../etl/nfl/build.mjs", import.meta.url), "utf8");
+  assert.ok(!/archive-pending|archivePending/.test(build), "no flag in the builder can skip the archive");
   // the build stamp says which it was
   assert.deepEqual(payloadsOf(derived)["nfl:meta"].archive, { status: "not_published" });
-  assert.deepEqual(payloadsOf({ ...derived, archive: { status: "pending", files: 7 } })["nfl:meta"].archive, { status: "pending", files: 7 });
+  assert.deepEqual(payloadsOf({ ...derived, archive: { status: "archived", files: 7, manifest_key: "m" } })["nfl:meta"].archive, { status: "archived", files: 7, manifest_key: "m" });
   const workflow = readFileSync(new URL("../.github/workflows/nfl-builder.yml", import.meta.url), "utf8");
-  assert.ok(!/^s*push:/m.test(workflow), "the workflow has no push trigger");
-  assert.match(workflow, /vars.NFL_SCHEDULED_PUBLISH == 'true' && 'r2,d1,kv' || 'none'/, "a scheduled run publishes nothing until the repository variable is set, and then always with the archive");
+  // the trigger block, read as YAML keys: on: workflow_dispatch and schedule, nothing else
+  const on = workflow.slice(workflow.indexOf("\non:"), workflow.indexOf("\npermissions:"));
+  assert.deepEqual(on.split("\n").filter((l) => /^ {2}[a-z_]+:/.test(l)).map((l) => l.trim().replace(/:.*$/, "")), ["workflow_dispatch", "schedule"], "the workflow has no push or pull_request trigger");
+  assert.ok(!/^\s*(push|pull_request|pull_request_target):/m.test(workflow), "and no push trigger anywhere in the file");
+  assert.ok(workflow.includes("vars.NFL_SCHEDULED_PUBLISH == 'true' && 'r2,d1,kv' || 'none'"), "a scheduled run publishes nothing until the repository variable is set, and then always with the archive");
   assert.match(workflow, /default: "none"/, "a manual run publishes nothing unless told what to publish");
 });
 

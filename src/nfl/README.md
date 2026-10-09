@@ -219,12 +219,23 @@ Limits that remain:
 
 ### The source archive
 
-A publish to the account includes the source archive (`r2`). Without it the
-builder refuses, unless `--archive-pending` is passed: then the files the
-build consumed are copied to `etl/nfl/archive-pending/<build id>/`, their
-`archive_key` stays NULL in `nfl_data_snapshots`, and `nfl:meta` carries
-`archive: { status: "pending" }`. The scheduled workflow never publishes
-with the archive pending.
+A publish to the account always includes the source archive (`r2`); the
+builder refuses a publish of D1 or KV without it, and there is no override.
+
+- Each source file is uploaded to the private bucket `pwr-props-archive` at
+  `nflverse/<season>/<build id>/<file>`, then read back from R2 and its
+  SHA-256 compared with the one recorded at download.
+- A file identical to the newest archived copy is not uploaded again, but
+  that copy is read back and checked too; if it is missing or differs, the
+  file is uploaded again.
+- Then the manifest (source URL, retrieval time, upstream last-modified and
+  ETag, SHA-256, bytes, rows, archive key per file) is uploaded beside the
+  files and checked the same way.
+- If any of that fails, the build stops before D1 and KV. Objects already
+  uploaded stay in the private bucket; readers keep the build they had.
+- `nfl_data_snapshots.archive_key` is filled only for verified objects, and
+  `nfl:meta.archive` is `{ status: "archived", files, manifest_key, uploaded, reused }`.
+- `--publish r2` alone archives and verifies, and writes nothing to D1 or KV.
 
 ## Odds refresh: switches, the lock, and measurement
 
