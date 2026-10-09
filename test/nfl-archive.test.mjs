@@ -225,3 +225,18 @@ test("the builder's command line goes through runPublish: the only D1 and KV cal
   assert.ok(main.indexOf("publishKv(") > run && main.indexOf("publishKv(") < close, "publishKv is inside the runPublish steps");
   assert.ok(existsSync(new URL("../etl/nfl/publish.mjs", import.meta.url)));
 });
+
+// ---------- the independent read-only check, run after an archive upload ----------
+test("the archive check compares every object with the manifest and treats any readable unsigned request as public", async () => {
+  const { verifyAgainstManifest, refusedAnonymously } = await import("../scripts/nfl-archive-verify.mjs");
+  const a = Buffer.from("aaa"), b = Buffer.from("bbb");
+  const store = new Map([["k/a", a], ["k/b", Buffer.from("changed")]]);
+  const manifest = { sources: [{ dataset: "a", sha256: sha(a), archive_key: "k/a" }, { dataset: "b", sha256: sha(b), archive_key: "k/b" }, { dataset: "c", sha256: "x", archive_key: "k/c" }, { dataset: "d", sha256: "x", archive_key: null }] };
+  const out = await verifyAgainstManifest(manifest, async (k) => store.get(k) ?? null);
+  assert.deepEqual(out.map((r) => [r.dataset, r.ok]), [["a", true], ["b", false], ["c", false], ["d", false]]);
+  assert.match(out[1].reason, /is not the recorded/);
+  assert.equal(out[2].reason, "missing");
+  assert.deepEqual((await verifyAgainstManifest({ sources: [] }, async () => null)).map((r) => r.ok), [false], "an empty manifest is not a verified archive");
+  for (const s of [400, 401, 403]) assert.equal(refusedAnonymously(s), true);
+  for (const s of [200, 206, 301, 302, 304, 404, 500]) assert.equal(refusedAnonymously(s), false, `${s} is not proof the bucket is private`);
+});
